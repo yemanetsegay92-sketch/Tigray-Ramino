@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Tigray Ramino</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+    <div id="turn-banner">
+        <span id="player-label">👤 Player 1</span>
+        <span class="badge" id="status-badge">🔒 Closed</span>
+    </div>
+    <div id="table-area"></div>
+    <div id="action-row">
+        <div id="deck-box">
+            <div class="deck-icon">🃏</div>
+            <div class="deck-count" id="deck-count">0</div>
+        </div>
+        <div id="discard-box">
+            <div class="discard-label">♻️ DISCARD</div>
+            <div class="discard-card" id="discard-card-display">—</div>
+            <div class="discard-hint" id="discard-hint">tap to take</div>
+        </div>
+    </div>
+    <div id="hand-area"></div>
+    <div id="controls">
+        <button class="ctrl-btn monte-btn" id="btn-monte">🎰 Declare Monte</button>
+    </div>
+    <div id="message">🃏 Drag horizontally to reorder · Drag to table/discard</div>
+</div>
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/validation.js"></script>
+<script src="js/joker.js"></script>
+<script src="js/monte.js"></script>
+<script src="js/game.js"></script>
+<script src="js/render.js"></script>
+<script src="js/drag.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
