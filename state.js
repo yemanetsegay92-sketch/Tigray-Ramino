@@ -17,6 +17,9 @@ TR.G = {
     mustOpen: false,
     lastDiscardJoker: false,
     monteMode: false,
+    montePlayer: null,
+    monteRequest: null,
+    monteWinPending: false,
     eliminated: [],
     jokerSwapActive: false
 };
@@ -42,6 +45,56 @@ TR.initDOM = function () {
     TR.dom.statusBadge = $('status-badge');
     TR.dom.discardHint = $('discard-hint');
     TR.dom.btnMonte = $('btn-monte');
+
+    // The existing button is the restart/request button. Create the
+    // separate Monte Win control without requiring HTML changes.
+    if (TR.dom.btnMonte) {
+        TR.dom.btnMonte.id = 'btn-declare-monte';
+        TR.dom.btnMonte.textContent = '🎰 Declare Monte';
+        TR.dom.btnMonte.style.width = 'auto';
+        TR.dom.btnMonte.style.minWidth = '0';
+        TR.dom.btnMonte.style.maxWidth = '48%';
+        TR.dom.btnMonte.style.padding = '10px 16px';
+
+        let wrap = TR.dom.btnMonte.parentElement;
+        if (!wrap || !wrap.classList.contains('monte-controls')) {
+            wrap = document.createElement('div');
+            wrap.className = 'monte-controls';
+            wrap.style.display = 'flex';
+            wrap.style.justifyContent = 'center';
+            wrap.style.alignItems = 'center';
+            wrap.style.gap = '10px';
+            wrap.style.flexWrap = 'wrap';
+            wrap.style.width = '100%';
+            TR.dom.btnMonte.parentNode.insertBefore(wrap, TR.dom.btnMonte);
+            wrap.appendChild(TR.dom.btnMonte);
+        }
+
+        let winBtn = document.getElementById('btn-monte-win');
+        if (!winBtn) {
+            winBtn = document.createElement('button');
+            winBtn.id = 'btn-monte-win';
+            winBtn.type = 'button';
+            winBtn.textContent = '🏆 Monte Win';
+            winBtn.style.width = 'auto';
+            winBtn.style.minWidth = '0';
+            winBtn.style.maxWidth = '48%';
+            winBtn.style.padding = '10px 16px';
+            wrap.appendChild(winBtn);
+        }
+        TR.dom.btnMonteWin = winBtn;
+    }
+
+    // Make the draw pile look like a neutral hidden card, never a Joker.
+    const drawCard = TR.dom.deckBox && TR.dom.deckBox.querySelector('.deck-card');
+    if (drawCard) {
+        drawCard.textContent = '';
+        drawCard.innerHTML = '';
+        drawCard.removeAttribute('data-rank');
+        drawCard.removeAttribute('data-card');
+        drawCard.setAttribute('aria-label', 'Hidden draw pile card');
+        drawCard.classList.add('neutral-draw-card');
+    }
 };
 
 TR.setMessage = function (msg) {

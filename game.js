@@ -86,6 +86,9 @@ TR.initGame=function(num){
     TR.G.mustOpen=false;
     TR.G.lastDiscardJoker=false;
     TR.G.monteMode=false;
+    TR.G.montePlayer=null;
+    TR.G.monteRequest=null;
+    TR.G.monteWinPending=false;
     TR.G.eliminated=[];
     TR.G.jokerSwapActive=false;
 
@@ -100,7 +103,8 @@ TR.initGame=function(num){
         for(let i=0;i<13;i++) if(TR.G.deck.length) TR.G.players[p].hand.push(TR.G.deck.pop());
 
     TR.G.discardPile=[];
-    TR.dom.btnMonte.textContent='🎰 Declare Monte';
+    if(TR.dom.btnMonte) TR.dom.btnMonte.textContent='🎰 Declare Monte';
+    if(TR.dom.btnMonteWin) TR.dom.btnMonteWin.textContent='🏆 Monte Win';
     TR.setMessage('🃏 Player 1: Discard one by dragging to discard pile.');
     TR.renderAll();
     TR.showModal('👤 Player 1',"Pass the phone and press \"I'm Ready\"",true);
@@ -330,18 +334,21 @@ TR.doDiscardCard=function(card){
     TR.G.lastDiscardJoker=TR.isJoker(card);
     TR.G.selected=[];
 
-    if(TR.G.monteMode && p.hand.length===0){
+    if(TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer && p.hand.length===0){
         const result=TR.validateMonte(TR.G.currentPlayer);
 
         if(result.valid){
+            // The final card has already been discarded. A valid Monte
+            // automatically wins immediately — no second claim/tap is needed.
             TR.G.winner=TR.G.currentPlayer;
+            TR.G.monteWinPending=false;
+            TR.G.monteMode=false;
+            TR.G.montePlayer=null;
             const mult=TR.G.lastDiscardJoker?4:2;
             const msg=mult>=4
                 ?`🏆 Player ${TR.G.currentPlayer+1} wins by QUADRUPLE MONTE! 🃏💰`
                 :`🏆 Player ${TR.G.currentPlayer+1} wins by DOUBLE MONTE! 🃏`;
             TR.setMessage(msg);
-            TR.G.monteMode=false;
-            TR.dom.btnMonte.textContent='🎰 Declare Monte';
             TR.renderAll();
             TR.showModal('🎉 MONTE!',msg,false);
             return;
@@ -354,7 +361,8 @@ TR.doDiscardCard=function(card){
         TR.G.discardPile=TR.G.discardPile.concat(allCards);
         TR.G.eliminated.push(TR.G.currentPlayer);
         TR.G.monteMode=false;
-        TR.dom.btnMonte.textContent='🎰 Declare Monte';
+        TR.G.montePlayer=null;
+        TR.G.monteWinPending=false;
 
         const active=TR.G.players.filter((_,i)=>!TR.G.eliminated.includes(i));
 
@@ -383,7 +391,7 @@ TR.doDiscardCard=function(card){
     // itself is completely normal; we only care whether this discard
     // actually finishes the game.
     if(TR.G.jokerSwapActive){
-        if(p.hand.length===0 && TR.isOpened(TR.G.currentPlayer) && !TR.G.monteMode){
+        if(p.hand.length===0 && TR.isOpened(TR.G.currentPlayer) && !(TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer)){
             TR.G.winner=TR.G.currentPlayer;
             TR.G.jokerSwapActive=false;
             const mult=TR.G.lastDiscardJoker?2:1;
@@ -403,7 +411,7 @@ TR.doDiscardCard=function(card){
         return;
     }
 
-    if(p.hand.length===0 && TR.isOpened(TR.G.currentPlayer) && !TR.G.monteMode){
+    if(p.hand.length===0 && TR.isOpened(TR.G.currentPlayer) && !(TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer)){
         TR.G.winner=TR.G.currentPlayer;
         const mult=TR.G.lastDiscardJoker?2:1;
         const msg=mult>=2
@@ -433,6 +441,7 @@ TR.doDiscardCard=function(card){
     TR.G.mustOpen=false;
     TR.G.selected=[];
     TR.G.jokerSwapActive=false;
+    TR.G.monteWinPending=false;
 
     TR.renderAll();
     TR.showModal(`👤 Player ${TR.G.currentPlayer+1}`,`Pass the phone and press "I'm Ready"`,true);

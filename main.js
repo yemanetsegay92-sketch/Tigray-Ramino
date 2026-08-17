@@ -20,18 +20,35 @@ function start(){
             TR.doTakeDiscard();
     });
 
-    TR.dom.btnMonte.addEventListener('click',TR.doDeclareMonte);
+    if(TR.dom.btnMonte) TR.dom.btnMonte.addEventListener('click',TR.requestMonteRestart);
+    if(TR.dom.btnMonteWin) TR.dom.btnMonteWin.addEventListener('click',TR.doMonteWin);
 
-    let cnt=prompt('Tigray Ramino — How many players? (2-4)','2');
-    let n=parseInt(cnt)||2;
-    if(n<2)n=2;
-    if(n>4)n=4;
-
-    TR.initGame(n);
-
-    window.__G=TR.G;
-    window.TigrayRaminoGame=TR;
+    // Clear, visible player-count choice instead of the browser prompt.
+    TR.showPlayerCountModal();
 }
+
+TR.showPlayerCountModal=function(){
+    TR.modalActive=true;
+    const old=document.querySelector('.modal-overlay'); if(old)old.remove();
+    const div=document.createElement('div');
+    div.className='modal-overlay';
+    div.innerHTML=`<div class="modal-box">
+      <div class="big-emoji">🃏</div>
+      <h2>Tigray Ramino</h2>
+      <p>How many players?</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn-big" data-n="2">2 Players</button>
+        <button class="btn-big" data-n="3">3 Players</button>
+        <button class="btn-big" data-n="4">4 Players</button>
+      </div>
+    </div>`;
+    document.body.appendChild(div);
+    div.querySelectorAll('[data-n]').forEach(btn=>btn.addEventListener('click',()=>{
+        const n=parseInt(btn.dataset.n,10);
+        div.remove(); TR.modalActive=false;
+        TR.initGame(n);
+    }));
+};
 
 if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',start);

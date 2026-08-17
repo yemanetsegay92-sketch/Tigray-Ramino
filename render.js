@@ -47,13 +47,25 @@ TR.renderAll=function(){
     TR.renderTable();
     TR.renderHand();
 
-    TR.dom.btnMonte.disabled=(TR.G.winner!==null||TR.G.monteMode);
-    if(TR.G.monteMode){
-        TR.dom.btnMonte.textContent='🔮 Monte Mode Active';
-        TR.dom.btnMonte.classList.add('active');
-    }else{
-        TR.dom.btnMonte.textContent='🎰 Declare Monte';
-        TR.dom.btnMonte.classList.remove('active');
+    if (TR.dom.btnMonte) {
+        TR.dom.btnMonte.disabled = (TR.G.winner!==null || !!TR.G.monteRequest);
+        TR.dom.btnMonte.textContent = TR.G.monteRequest ? '⏳ Monte Requested' : '🎰 Declare Monte';
+        TR.dom.btnMonte.classList.toggle('active', !!TR.G.monteRequest);
+    }
+    if (TR.dom.btnMonteWin) {
+        const monteBelongsToCurrent =
+            TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer;
+
+        // Once a player declares Monte Win, the declaration stays attached
+        // to that player. Other players cannot accidentally activate or
+        // inherit the Monte attempt on their turns.
+        TR.dom.btnMonteWin.disabled =
+            TR.G.winner!==null ||
+            !!TR.G.monteRequest ||
+            (TR.G.monteMode && TR.G.montePlayer!==TR.G.currentPlayer);
+
+        TR.dom.btnMonteWin.textContent = '🏆 Monte Win';
+        TR.dom.btnMonteWin.classList.toggle('active', monteBelongsToCurrent);
     }
 };
 
@@ -133,12 +145,14 @@ TR.renderTable=function(){
         }
     }
 
-    if(!area.children.length){
-        const empty=document.createElement('div');
-        empty.style.cssText='width:100%;text-align:center;color:#5a8a5a;padding:14px;font-size:0.9rem;';
-        empty.textContent='🃏 Drop here to create a new combo · Drop onto a combo to add';
-        area.appendChild(empty);
-    }
+    // Exactly ONE permanent opening space. Existing combos stay visible,
+    // while this single + slot remains available for the next new combo.
+    const openingSlot=document.createElement('div');
+    openingSlot.className='opening-slot';
+    openingSlot.style.cssText='width:88px;height:88px;min-width:88px;border:2px dashed rgba(150,205,70,.55);border-radius:16px;display:flex;align-items:center;justify-content:center;color:#7fb83c;font-size:3rem;font-weight:700;box-sizing:border-box;margin:10px auto;';
+    openingSlot.textContent='+';
+    openingSlot.setAttribute('aria-label','Open a new combination here');
+    area.appendChild(openingSlot);
 };
 
 TR.renderHand=function(){

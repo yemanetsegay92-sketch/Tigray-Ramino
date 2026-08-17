@@ -1,35 +1,13 @@
-TIGRAY RAMINO – FIXED 10-FILE VERSION
+TIGRAY RAMINO – SELECTED UI / MONTE IMPROVEMENTS
 
-The previous ZIP accidentally contained only the README/snippet and not the
-actual JavaScript files. This ZIP contains the real 10 JavaScript files.
+Based on Tigray_Ramino_11_Final_Turn_Rules.zip.
 
-Folder:
-js/
-  config.js
-  state.js
-  cards.js
-  validation.js
-  joker.js
-  monte.js
-  game.js
-  render.js
-  drag.js
-  main.js
+Changes only:
+- One permanent + opening space; opened combos remain visible.
+- Declare Monte requests a restart and requires every other player to agree.
+- Monte Win is a separate control. It belongs to the player who activates it; after that player's final discard, the system checks the Monte automatically with no claim/confirmation tap.
+- Draw pile card back is neutral and does not display a J or Joker.
+- The hand renderer/layout was NOT changed.
+- Player count uses a visible button modal instead of the browser prompt.
 
-HTML:
-Remove the old:
-<script src="script.js"></script>
-
-Then use the exact script order in script-order.txt.
-
-IMPORTANT:
-If your HTML is in the same folder as the js folder, use:
-<script src="js/config.js"></script>
-...
-<script src="js/main.js"></script>
-
-The drag/drop implementation cleans up the drag ghost BEFORE opening,
-adding, or discarding, so the ghost cards should not remain on screen.
-
-The code uses window.TigrayRamino internally so the ten files can share the
-same game state without ES-module configuration.
+Use the same script order in script-order.txt.
