@@ -39,3 +39,4 @@ window.RaminoFirebase = {
 window.dispatchEvent(new Event('ramino-firebase-ready'));
 
 console.log('🔥 Tigray Ramino Firebase connected:', app.options.projectId);
+alert('🔥 Firebase connected to Tigray Ramino!');
