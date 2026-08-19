@@ -420,16 +420,42 @@
             // --------------------------------------------------------
             // Start
             // --------------------------------------------------------
-            document.getElementById(
-                'mp-start'
-            ).onclick = () => {
+         document.getElementById(
+    'mp-start'
+).onclick = async () => {
 
-                document.getElementById(
-                    'mp-status'
-                ).textContent =
-                    '⏳ Firebase game connection comes next.';
+    const status =
+        document.getElementById('mp-status');
 
-            };
+    try {
+
+        status.textContent =
+            '⏳ Starting Ramino...';
+
+        if (
+            typeof TigrayRaminoMultiplayerGame ===
+            'undefined'
+        ) {
+            throw new Error(
+                'multiplayer-game.js is not loaded.'
+            );
+        }
+
+        await TigrayRaminoMultiplayerGame.start(
+            this.currentRoom
+        );
+
+    } catch (error) {
+
+        console.error(
+            'Multiplayer start error:',
+            error
+        );
+
+        status.textContent =
+            '❌ ' + error.message;
+    }
+};
         },
 
 
