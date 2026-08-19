@@ -664,17 +664,29 @@
 
 
             // Start button
-            document.getElementById(
-                'mp-start'
-            ).onclick = () => {
+document.getElementById('mp-start').onclick = async () => {
 
-                document.getElementById(
-                    'mp-status'
-                ).textContent =
-                    'Game start will be connected next.';
+    const status = document.getElementById('mp-status');
 
-            };
-        },
+    try {
+
+        status.textContent = '⏳ Starting Ramino...';
+
+        await TigrayRaminoMultiplayerGame.start(
+            this.currentRoom
+        );
+
+    } catch (error) {
+
+        console.error(
+            'Multiplayer start error:',
+            error
+        );
+
+        status.textContent =
+            '❌ Could not start the game.';
+    }
+};
 
 
         // ------------------------------------------------------------
