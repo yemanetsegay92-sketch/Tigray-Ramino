@@ -14,8 +14,9 @@
 (function () {
     'use strict';
 
-    const GameMP = {
+    const TR = window.TigrayRamino;
 
+    const GameMP = {
         roomId: null,
         playerId: null,
         playerIndex: null,
