@@ -55,7 +55,23 @@
   <!-- <script src="js/multiplayer-game.js"></script> -->
 <script>
 document.getElementById('btn-multiplayer').addEventListener('click', function () {
+
+    if (
+        typeof TigrayRaminoMultiplayer === 'undefined'
+    ) {
+        alert('❌ multiplayer.js is not loaded');
+        return;
+    }
+
+    if (
+        typeof TigrayRaminoMultiplayer.openLobby !== 'function'
+    ) {
+        alert('❌ openLobby() is missing');
+        return;
+    }
+
     TigrayRaminoMultiplayer.openLobby();
+
 });
 </script>
 
