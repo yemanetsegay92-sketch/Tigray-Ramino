@@ -676,18 +676,15 @@
         status.textContent =
             '⏳ Starting Ramino...';
 
-        if (
-            typeof TigrayRaminoMultiplayerGame ===
-            'undefined'
-        ) {
-            throw new Error(
-                'multiplayer-game.js is not loaded.'
-            );
-        }
+        if (!window.TigrayRaminoMultiplayerGame) {
+    throw new Error(
+        'multiplayer-game.js is not loaded.'
+    );
+}
 
-        await TigrayRaminoMultiplayerGame.start(
-            this.currentRoom
-        );
+        await window.TigrayRaminoMultiplayerGame.start(
+    this.currentRoom
+);
 
     } catch (error) {
 

@@ -25,6 +25,10 @@
 
     const TR = window.TigrayRamino;
 
+if (!TR) {
+    console.error('TigrayRamino engine is not loaded.');
+    return;
+}
     const GameMP = {
 
         roomId: null,
