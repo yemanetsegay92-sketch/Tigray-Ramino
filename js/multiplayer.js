@@ -787,12 +787,65 @@ if (startButton) {
 
 
                                 const room =
-                                    snapshot.data();
+    snapshot.data();
 
 
-                                this.renderPlayers(
-                                    room
-                                );
+// --------------------------------------------------------
+// GAME HAS STARTED
+// --------------------------------------------------------
+
+if (room.status === 'playing') {
+
+    // Keep the latest room information.
+    this.currentRoom = {
+
+        id: code,
+
+        hostId:
+            room.hostId,
+
+        role:
+            room.hostId ===
+            this.player?.id
+                ? 'host'
+                : 'player'
+    };
+
+    // Tell the multiplayer game to enter the
+    // Firestore-controlled game.
+    if (
+        window.TigrayRaminoMultiplayerGame
+    ) {
+
+        try {
+
+            window
+                .TigrayRaminoMultiplayerGame
+                .start(
+                    this.currentRoom
+                );
+
+        } catch (error) {
+
+            console.error(
+                'Could not enter multiplayer game:',
+                error
+            );
+        }
+    }
+
+    // Close the lobby for Player 2.
+    // The game itself is now controlled by Firestore.
+    this.closeLobby();
+
+    return;
+}
+
+
+// Normal waiting-room behavior.
+this.renderPlayers(
+    room
+);
                             },
 
                             error => {

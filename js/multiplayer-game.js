@@ -310,14 +310,14 @@
 
             if (!isHost) {
 
-                this.setStatus(
-                    '⏳ Waiting for the host to start the game...'
-                );
+    // Player 2+ does NOT create the game.
+    // They only enter the online game when
+    // the host has started it.
 
-                this.listen(room);
+    this.enterOnlineGame(room);
 
-                return false;
-            }
+    return true;
+}
 
 
             // --------------------------------------------------------
@@ -356,7 +356,9 @@
             // ========================================================
             // INITIALIZE EXISTING RAMINO ENGINE
             // ========================================================
-
+// This is an ONLINE multiplayer game.
+// Do not use the local pass-the-phone flow.
+TR.G.multiplayer = true;
             TR.initGame(
                 playerIds.length
             );
@@ -619,8 +621,76 @@
             return true;
         },
 
-
+            
         // ============================================================
+        // ENTER ONLINE GAME — NON-HOST PLAYERS
+        // ============================================================
+
+        enterOnlineGame(room) {
+
+            if (!room || !room.id) {
+                return;
+            }
+
+            this.roomId =
+                room.id;
+
+            this.playerId =
+                window
+                    .TigrayRaminoMultiplayer
+                    ?.player
+                    ?.id || null;
+
+            if (!this.playerId) {
+
+                console.error(
+                    'Online player identity not found.'
+                );
+
+                return;
+            }
+
+            // This is an ONLINE game.
+            // Do not use local pass-the-phone behavior.
+            TR.G.multiplayer = true;
+
+            // Initialize local engine structure.
+            // Firestore will provide the real shared state.
+            TR.initGame(2);
+
+            // Remove local pass-phone modal.
+            const modal =
+                document.querySelector(
+                    '.modal-overlay'
+                );
+
+            if (modal) {
+                modal.remove();
+            }
+
+            TR.modalActive = false;
+
+            // Connect game actions to multiplayer.
+            this.patchActions();
+
+            // Listen to Firestore.
+            this.listen(room);
+
+            // Close the multiplayer lobby.
+            if (
+                window.TigrayRaminoMultiplayer &&
+                typeof window
+                    .TigrayRaminoMultiplayer
+                    .closeLobby === 'function'
+            ) {
+
+                window
+                    .TigrayRaminoMultiplayer
+                    .closeLobby();
+            }
+        },
+
+        //      ============================================================
         // PATCH EXISTING RAMINO ACTIONS
         // ============================================================
 
