@@ -796,7 +796,11 @@ if (startButton) {
 
 if (room.status === 'playing') {
 
-    // Keep the latest room information.
+  const app = document.getElementById('app');
+
+if (app) {
+    app.style.display = 'block';
+}
     this.currentRoom = {
 
         id: code,
