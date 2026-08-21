@@ -14,9 +14,9 @@
    - Existing Ramino engine/rules are preserved
 
    NOT YET:
-   - Combo synchronization
-   - Joker synchronization
-   - Monte synchronization
+   - Full combo synchronization
+   - Full joker synchronization
+   - Full Monte synchronization
    - Full win synchronization
    ================================================================ */
 
@@ -25,10 +25,13 @@
 
     const TR = window.TigrayRamino;
 
-if (!TR) {
-    console.error('TigrayRamino engine is not loaded.');
-    return;
-}
+    if (!TR) {
+        console.error(
+            'TigrayRamino engine is not loaded.'
+        );
+        return;
+    }
+
     const GameMP = {
 
         roomId: null,
@@ -40,6 +43,10 @@ if (!TR) {
 
         syncing: false,
         patched: false,
+
+        originalDraw: null,
+        originalTakeDiscard: null,
+        originalDiscard: null,
 
 
         // ============================================================
@@ -59,14 +66,20 @@ if (!TR) {
                 const timer = setInterval(() => {
 
                     if (window.RaminoFirebase) {
+
                         clearInterval(timer);
-                        resolve(window.RaminoFirebase);
+
+                        resolve(
+                            window.RaminoFirebase
+                        );
+
                         return;
                     }
 
                     attempts++;
 
                     if (attempts > 100) {
+
                         clearInterval(timer);
 
                         reject(
@@ -87,7 +100,9 @@ if (!TR) {
 
         cardData(card) {
 
-            if (!card) return null;
+            if (!card) {
+                return null;
+            }
 
             return {
                 id: String(card.id),
@@ -101,7 +116,9 @@ if (!TR) {
 
             return (cards || [])
                 .filter(Boolean)
-                .map(card => this.cardData(card));
+                .map(card =>
+                    this.cardData(card)
+                );
         },
 
 
@@ -194,6 +211,7 @@ if (!TR) {
                 );
             }
 
+
             if (!TR) {
 
                 throw new Error(
@@ -229,6 +247,10 @@ if (!TR) {
                 Firebase.db;
 
 
+            // --------------------------------------------------------
+            // ROOM
+            // --------------------------------------------------------
+
             const roomRef =
                 Firebase.doc(
                     db,
@@ -263,6 +285,10 @@ if (!TR) {
                 Object.keys(players);
 
 
+            // --------------------------------------------------------
+            // MINIMUM PLAYERS
+            // --------------------------------------------------------
+
             if (playerIds.length < 2) {
 
                 this.setStatus(
@@ -273,14 +299,14 @@ if (!TR) {
             }
 
 
+            // --------------------------------------------------------
+            // HOST
+            // --------------------------------------------------------
+
             const isHost =
                 roomData.hostId ===
                 this.playerId;
 
-
-            // --------------------------------------------------------
-            // NON-HOST
-            // --------------------------------------------------------
 
             if (!isHost) {
 
@@ -342,12 +368,14 @@ if (!TR) {
                     '.modal-overlay'
                 );
 
+
             if (modal) {
                 modal.remove();
             }
 
 
-            TR.modalActive = false;
+            TR.modalActive =
+                false;
 
 
             // ========================================================
@@ -407,6 +435,11 @@ if (!TR) {
 
                 const localPlayer =
                     TR.G.players[i];
+
+
+                if (!localPlayer) {
+                    continue;
+                }
 
 
                 publicPlayers.push({
@@ -510,8 +543,6 @@ if (!TR) {
                 phase:
                     TR.G.phase,
 
-                // IMPORTANT:
-                // Stored for Stage 2A synchronization.
                 deck:
                     this.cardsData(
                         TR.G.deck
@@ -557,10 +588,14 @@ if (!TR) {
             );
 
 
-            // Update room status.
+            // --------------------------------------------------------
+            // UPDATE ROOM STATUS
+            // --------------------------------------------------------
+
             await Firebase.updateDoc(
                 roomRef,
                 {
+
                     status:
                         'playing',
 
@@ -587,14 +622,6 @@ if (!TR) {
 
         // ============================================================
         // PATCH EXISTING RAMINO ACTIONS
-        //
-        // main.js and drag.js already call:
-        //
-        // TR.doDraw()
-        // TR.doTakeDiscard()
-        // TR.doDiscardCard()
-        //
-        // We replace those functions with multiplayer versions.
         // ============================================================
 
         patchActions() {
@@ -603,7 +630,9 @@ if (!TR) {
                 return;
             }
 
-            this.patched = true;
+
+            this.patched =
+                true;
 
 
             // --------------------------------------------------------
@@ -669,7 +698,10 @@ if (!TR) {
 
         isMyTurn() {
 
-            if (!this.playerIndex && this.playerIndex !== 0) {
+            if (
+                !this.playerIndex &&
+                this.playerIndex !== 0
+            ) {
                 return false;
             }
 
@@ -721,13 +753,15 @@ if (!TR) {
             }
 
 
-            this.syncing = true;
+            this.syncing =
+                true;
 
 
             try {
 
-                // Use existing Ramino rule.
-                this.originalDraw.call(TR);
+                this.originalDraw.call(
+                    TR
+                );
 
 
                 await this.publishCurrentState();
@@ -745,9 +779,11 @@ if (!TR) {
                     error.message
                 );
 
+
             } finally {
 
-                this.syncing = false;
+                this.syncing =
+                    false;
             }
         },
 
@@ -793,12 +829,15 @@ if (!TR) {
             }
 
 
-            this.syncing = true;
+            this.syncing =
+                true;
 
 
             try {
 
-                this.originalTakeDiscard.call(TR);
+                this.originalTakeDiscard.call(
+                    TR
+                );
 
 
                 await this.publishCurrentState();
@@ -816,9 +855,11 @@ if (!TR) {
                     error.message
                 );
 
+
             } finally {
 
-                this.syncing = false;
+                this.syncing =
+                    false;
             }
         },
 
@@ -859,7 +900,8 @@ if (!TR) {
             }
 
 
-            this.syncing = true;
+            this.syncing =
+                true;
 
 
             try {
@@ -874,12 +916,9 @@ if (!TR) {
                 );
 
 
-                // If the original engine ended the game,
-                // still publish the resulting state.
                 await this.publishCurrentState();
 
 
-                // Inform the local player if the turn changed.
                 if (
                     TR.G.winner === null &&
                     TR.G.currentPlayer !==
@@ -887,9 +926,12 @@ if (!TR) {
                 ) {
 
                     this.setStatus(
+
                         TR.G.currentPlayer ===
                         this.playerIndex
+
                             ? '👉 Your turn.'
+
                             : `⏳ Waiting for Player ${
                                 TR.G.currentPlayer + 1
                               }...`
@@ -909,26 +951,17 @@ if (!TR) {
                     error.message
                 );
 
+
             } finally {
 
-                this.syncing = false;
+                this.syncing =
+                    false;
             }
         },
 
 
         // ============================================================
         // PUBLISH CURRENT STATE
-        //
-        // For Stage 2A we publish:
-        //
-        // - current player
-        // - phase
-        // - deck
-        // - discard pile
-        // - hand counts
-        // - basic public combo information
-        //
-        // Each player's actual hand remains private.
         // ============================================================
 
         async publishCurrentState() {
@@ -962,7 +995,7 @@ if (!TR) {
 
 
             // --------------------------------------------------------
-            // Our local player's hand
+            // MY PLAYER
             // --------------------------------------------------------
 
             const myPlayer =
@@ -980,12 +1013,7 @@ if (!TR) {
 
 
             // --------------------------------------------------------
-            // Public players
-            //
-            // IMPORTANT:
-            // We don't know the other players' actual hands locally.
-            // So we read the existing public state first and only
-            // update information that this player can safely change.
+            // READ CURRENT PUBLIC STATE
             // --------------------------------------------------------
 
             const gameSnap =
@@ -1017,6 +1045,10 @@ if (!TR) {
                     : [];
 
 
+            // --------------------------------------------------------
+            // UPDATE OUR PUBLIC PLAYER DATA
+            // --------------------------------------------------------
+
             if (
                 publicPlayers[
                     this.playerIndex
@@ -1043,9 +1075,9 @@ if (!TR) {
             }
 
 
-            // --------------------------------------------------------
-            // PUBLIC STATE
-            // --------------------------------------------------------
+            // ========================================================
+            // PUBLIC UPDATE
+            // ========================================================
 
             const update = {
 
@@ -1104,9 +1136,9 @@ if (!TR) {
             );
 
 
-            // --------------------------------------------------------
+            // ========================================================
             // PRIVATE HAND
-            // --------------------------------------------------------
+            // ========================================================
 
             await Firebase.setDoc(
                 privateRef,
@@ -1156,7 +1188,7 @@ if (!TR) {
 
 
                     // ------------------------------------------------
-                    // Stop previous listeners
+                    // STOP OLD LISTENERS
                     // ------------------------------------------------
 
                     if (
@@ -1310,6 +1342,17 @@ if (!TR) {
                                 );
                             }
                         );
+                })
+                .catch(error => {
+
+                    console.error(
+                        'Multiplayer listen error:',
+                        error
+                    );
+
+                    this.setStatus(
+                        '❌ Could not connect to multiplayer game.'
+                    );
                 });
         },
 
@@ -1330,7 +1373,9 @@ if (!TR) {
 
 
             const publicPlayers =
-                state.players || [];
+                Array.isArray(state.players)
+                    ? state.players
+                    : [];
 
 
             TR.G.numPlayers =
@@ -1353,7 +1398,9 @@ if (!TR) {
             TR.G.winner =
                 state.winner === null ||
                 state.winner === undefined
+
                     ? null
+
                     : state.winner;
 
 
@@ -1376,7 +1423,9 @@ if (!TR) {
             TR.G.montePlayer =
                 state.montePlayer === null ||
                 state.montePlayer === undefined
+
                     ? null
+
                     : state.montePlayer;
 
 
@@ -1384,9 +1433,9 @@ if (!TR) {
                 !!state.mustOpen;
 
 
-            // --------------------------------------------------------
+            // ========================================================
             // PUBLIC PLAYERS
-            // --------------------------------------------------------
+            // ========================================================
 
             TR.G.players =
                 publicPlayers.map(
@@ -1399,3 +1448,277 @@ if (!TR) {
                                 .map(c => ({
 
                                     cards:
+                                        (c.cards || [])
+                                            .map(x => ({
+                                                ...x
+                                            })),
+
+                                    type:
+                                        c.type ||
+                                        'sequence',
+
+                                    points:
+                                        Number(
+                                            c.points || 0
+                                        ),
+
+                                    displayCards:
+                                        (c.displayCards || [])
+                                            .map(dc => ({
+
+                                                card:
+                                                    dc.card
+                                                        ? {
+                                                            ...dc.card
+                                                        }
+                                                        : null,
+
+                                                displayRank:
+                                                    dc.displayRank,
+
+                                                displaySuit:
+                                                    dc.displaySuit
+                                            }))
+                                })),
+
+                        opened:
+                            !!pp.opened
+                    })
+                );
+
+
+            // ========================================================
+            // PUBLIC DISCARD PILE
+            // ========================================================
+
+            TR.G.discardPile =
+                (state.discardPile || [])
+                    .map(
+                        c => ({
+                            ...c
+                        })
+                    );
+
+
+            // ========================================================
+            // SYNCHRONIZED DECK
+            //
+            // We don't expose the actual deck cards to the player
+            // logic here. The count is enough for Stage 2A.
+            // ========================================================
+
+            const deckCount =
+                Number(
+                    state.deckCount || 0
+                );
+
+
+            TR.G.deck =
+                new Array(
+                    Math.max(
+                        0,
+                        deckCount
+                    )
+                ).fill(null);
+
+
+            // ========================================================
+            // FIND OUR PLAYER INDEX
+            // ========================================================
+
+            const myId =
+                window
+                    .TigrayRaminoMultiplayer
+                    ?.player
+                    ?.id;
+
+
+            this.playerIndex =
+                orderedIds.indexOf(
+                    myId
+                );
+
+
+            if (
+                this.playerIndex < 0
+            ) {
+                return;
+            }
+
+
+            // ========================================================
+            // RESET LOCAL SELECTION
+            // ========================================================
+
+            TR.G.selected =
+                [];
+
+
+            TR.G.jokerSwapActive =
+                false;
+
+
+            // ========================================================
+            // RENDER
+            // ========================================================
+
+            if (
+                typeof TR.renderAll ===
+                'function'
+            ) {
+
+                TR.renderAll();
+            }
+
+
+            // ========================================================
+            // TURN MESSAGE
+            // ========================================================
+
+            if (
+                TR.G.currentPlayer ===
+                this.playerIndex
+            ) {
+
+                this.setStatus(
+                    '👉 Your turn.'
+                );
+
+            } else {
+
+                this.setStatus(
+                    `⏳ Waiting for Player ${
+                        TR.G.currentPlayer + 1
+                    }...`
+                );
+            }
+        },
+
+
+        // ============================================================
+        // APPLY PRIVATE HAND
+        // ============================================================
+
+        applyPrivateHand(hand) {
+
+            if (
+                this.playerIndex === null ||
+                this.playerIndex === undefined ||
+                this.playerIndex < 0
+            ) {
+                return;
+            }
+
+
+            if (
+                !TR.G.players[
+                    this.playerIndex
+                ]
+            ) {
+                return;
+            }
+
+
+            TR.G.players[
+                this.playerIndex
+            ].hand =
+
+                this.cardsFromData(
+                    hand
+                );
+
+
+            if (
+                typeof TR.renderAll ===
+                'function'
+            ) {
+
+                TR.renderAll();
+            }
+        },
+
+
+        // ============================================================
+        // STATUS
+        // ============================================================
+
+        setStatus(message) {
+
+            const el =
+                document.getElementById(
+                    'mp-status'
+                );
+
+
+            if (el) {
+
+                el.textContent =
+                    message;
+            }
+
+
+            if (
+                window.TigrayRamino?.setMessage
+            ) {
+
+                TR.setMessage(
+                    message
+                );
+            }
+        },
+
+
+        // ============================================================
+        // STOP
+        // ============================================================
+
+        stop() {
+
+            if (
+                this.unsubscribeGame
+            ) {
+
+                this.unsubscribeGame();
+
+                this.unsubscribeGame =
+                    null;
+            }
+
+
+            if (
+                this.unsubscribePrivate
+            ) {
+
+                this.unsubscribePrivate();
+
+                this.unsubscribePrivate =
+                    null;
+            }
+
+
+            this.roomId =
+                null;
+
+            this.playerId =
+                null;
+
+            this.playerIndex =
+                null;
+
+            this.syncing =
+                false;
+
+            this.patched =
+                false;
+        }
+    };
+
+
+    // ================================================================
+    // EXPORT
+    // ================================================================
+
+    window.TigrayRaminoMultiplayerGame =
+        GameMP;
+
+})();
