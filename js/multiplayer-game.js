@@ -1600,13 +1600,6 @@ TR.G.multiplayer = true;
 
 
             // ========================================================
-            // SYNCHRONIZED DECK
-            //
-            // We don't expose the actual deck cards to the player
-            // logic here. The count is enough for Stage 2A.
-            // ========================================================
-
-            // ========================================================
 // SYNCHRONIZED DECK
 //
 // The multiplayer game needs the actual card objects here.
