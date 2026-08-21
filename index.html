@@ -7,7 +7,41 @@
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-<div id="app">
+  <div id="mode-screen">
+
+    <div class="mode-box">
+
+        <div class="big-emoji">🃏</div>
+
+        <h1>Tigray Ramino</h1>
+
+        <p>Welcome!</p>
+
+        <button
+            class="btn-big"
+            id="btn-online"
+        >
+            🌐 Online Multiplayer
+        </button>
+
+        <button
+            class="btn-big"
+            id="btn-training"
+        >
+            🎮 Training / Local
+        </button>
+
+        <button
+            class="btn-big"
+            id="btn-how-to-play"
+        >
+            📖 How to Play
+        </button>
+
+    </div>
+
+  </div>
+<div id="app" style="display:none;">
     <div id="turn-banner">
         <span id="player-label">👤 Player 1</span>
         <span class="badge" id="status-badge">🔒 Closed</span>
@@ -34,12 +68,9 @@
         🏆 Monte Win
     </button>
 
-    <button class="ctrl-btn" id="btn-multiplayer">
-        🎮 Multiplayer
-    </button>
 </div>
     <div id="message">🃏 Drag horizontally to reorder · Drag to table/discard</div>
-</div>
+</>
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/cards.js"></script>
@@ -53,12 +84,6 @@
 <script type="module" src="js/firebase.js"></script>
 <script src="js/multiplayer.js"></script>
 <script src="js/multiplayer-game.js"></script>
-  
-<script>
-document.getElementById('btn-multiplayer').addEventListener('click', function () {
-    TigrayRaminoMultiplayer.openLobby();
-});
-</script>
 
 </body>
 </html>
