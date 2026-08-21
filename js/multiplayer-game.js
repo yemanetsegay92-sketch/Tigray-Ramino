@@ -583,7 +583,12 @@ TR.G.multiplayer = true;
                     Firebase.serverTimestamp()
             };
 
-
+console.log(
+    '🔥 HOST WRITING DECK:',
+    publicState.deck,
+    'COUNT:',
+    publicState.deck.length
+);
             await Firebase.setDoc(
                 gameRef,
                 publicState
@@ -1606,7 +1611,14 @@ TR.G.multiplayer = true;
 // Using null placeholders causes the existing Ramino draw
 // function to fail when it tries to read card.id.
 // ========================================================
-
+console.log(
+    '🔥 MULTIPLAYER DECK RECEIVED:',
+    state.deck,
+    'COUNT:',
+    state.deck?.length,
+    'STORED COUNT:',
+    state.deckCount
+);
 TR.G.deck =
     this.cardsFromData(
         state.deck || []
