@@ -1503,15 +1503,45 @@ TR.G.multiplayer = true;
                 !!state.mustOpen;
 
 
+                        // ========================================================
+            // FIND OUR PLAYER INDEX
+            // ========================================================
+
+            const myId =
+                window
+                    .TigrayRaminoMultiplayer
+                    ?.player
+                    ?.id;
+
+            this.playerIndex =
+                orderedIds.indexOf(
+                    myId
+                );
+
+
             // ========================================================
             // PUBLIC PLAYERS
             // ========================================================
 
+            const existingMyHand =
+                this.playerIndex !== null &&
+                this.playerIndex !== undefined &&
+                this.playerIndex >= 0 &&
+                TR.G.players[this.playerIndex]
+                    ? TR.G.players[this.playerIndex].hand || []
+                    : [];
+
+
             TR.G.players =
                 publicPlayers.map(
-                    pp => ({
+                    (pp, index) => ({
 
-                        hand: [],
+                        // Keep MY private hand locally.
+                        // Other players' hands remain private.
+                        hand:
+                            index === this.playerIndex
+                                ? existingMyHand
+                                : [],
 
                         combos:
                             (pp.combos || [])
@@ -1556,7 +1586,6 @@ TR.G.multiplayer = true;
                     })
                 );
 
-
             // ========================================================
             // PUBLIC DISCARD PILE
             // ========================================================
@@ -1577,43 +1606,19 @@ TR.G.multiplayer = true;
             // logic here. The count is enough for Stage 2A.
             // ========================================================
 
-            const deckCount =
-                Number(
-                    state.deckCount || 0
-                );
-
-
-            TR.G.deck =
-                new Array(
-                    Math.max(
-                        0,
-                        deckCount
-                    )
-                ).fill(null);
-
-
             // ========================================================
-            // FIND OUR PLAYER INDEX
-            // ========================================================
+// SYNCHRONIZED DECK
+//
+// The multiplayer game needs the actual card objects here.
+// Using null placeholders causes the existing Ramino draw
+// function to fail when it tries to read card.id.
+// ========================================================
 
-            const myId =
-                window
-                    .TigrayRaminoMultiplayer
-                    ?.player
-                    ?.id;
+TR.G.deck =
+    this.cardsFromData(
+        state.deck || []
+    );
 
-
-            this.playerIndex =
-                orderedIds.indexOf(
-                    myId
-                );
-
-
-            if (
-                this.playerIndex < 0
-            ) {
-                return;
-            }
 
 
             // ========================================================
