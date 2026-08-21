@@ -664,39 +664,81 @@
 
 
             // Start button
-           document.getElementById(
-    'mp-start'
-).onclick = async () => {
+const startButton =
+    document.getElementById('mp-start');
 
-    const status =
-        document.getElementById('mp-status');
+if (startButton) {
 
-    try {
+    // Only the host can start the game.
+    if (!isHost) {
 
-        status.textContent =
-            '⏳ Starting Ramino...';
+        startButton.disabled = true;
 
-        if (!window.TigrayRaminoMultiplayerGame) {
-    throw new Error(
-        'multiplayer-game.js is not loaded.'
-    );
-}
+        startButton.textContent =
+            '⏳ Waiting for Host...';
 
-        await window.TigrayRaminoMultiplayerGame.start(
-    this.currentRoom
-);
+    } else {
 
-    } catch (error) {
+        startButton.onclick = async () => {
 
-        console.error(
-            'Multiplayer start error:',
-            error
-        );
+            const status =
+                document.getElementById('mp-status');
 
-        status.textContent =
-            '❌ ' + error.message;
+            startButton.disabled = true;
+
+            if (status) {
+                status.textContent =
+                    '🎮 Starting game...';
+            }
+
+            try {
+
+                if (
+                    !window.TigrayRaminoMultiplayerGame
+                ) {
+                    throw new Error(
+                        'multiplayer-game.js is not loaded.'
+                    );
+                }
+
+                if (!this.currentRoom) {
+                    throw new Error(
+                        'No multiplayer room is active.'
+                    );
+                }
+
+                const started =
+                    await window
+                        .TigrayRaminoMultiplayerGame
+                        .start(
+                            this.currentRoom
+                        );
+
+                if (started) {
+
+                    // Game has successfully started.
+                    // Now close the lobby.
+                    this.closeLobby();
+                }
+
+            } catch (error) {
+
+                console.error(
+                    'Multiplayer start error:',
+                    error
+                );
+
+                if (status) {
+                    status.textContent =
+                        '❌ Could not start game: ' +
+                        error.message;
+                }
+
+                startButton.disabled = false;
+            }
+        };
     }
-};
+}
         },
 
 
