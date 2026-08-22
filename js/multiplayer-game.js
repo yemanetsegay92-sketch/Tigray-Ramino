@@ -1674,7 +1674,118 @@ TR.G.deck =
             }
         },
 
+// ============================================================
+// LOCAL HAND ORDER
+// Rearranging cards never uses the network.
+// Only the preferred card order is stored locally.
+// ============================================================
 
+saveLocalHandOrder() {
+
+    if (!this.roomId || !this.playerId) {
+        return;
+    }
+
+    if (
+        this.playerIndex === null ||
+        this.playerIndex === undefined ||
+        this.playerIndex < 0
+    ) {
+        return;
+    }
+
+    const player =
+        TR.G.players[this.playerIndex];
+
+    if (!player || !Array.isArray(player.hand)) {
+        return;
+    }
+
+    const order =
+        player.hand.map(card => String(card.id));
+
+    try {
+
+        localStorage.setItem(
+            `ramino_hand_order_${this.roomId}_${this.playerId}`,
+            JSON.stringify(order)
+        );
+
+    } catch (error) {
+
+        console.warn(
+            'Could not save local hand order:',
+            error
+        );
+    }
+},
+
+
+applyLocalHandOrder(hand) {
+
+    if (!this.roomId || !this.playerId) {
+        return hand;
+    }
+
+    let savedOrder = null;
+
+    try {
+
+        const raw =
+            localStorage.getItem(
+                `ramino_hand_order_${this.roomId}_${this.playerId}`
+            );
+
+        if (raw) {
+            savedOrder = JSON.parse(raw);
+        }
+
+    } catch (error) {
+
+        console.warn(
+            'Could not read local hand order:',
+            error
+        );
+    }
+
+    if (
+        !Array.isArray(savedOrder) ||
+        !savedOrder.length
+    ) {
+        return hand;
+    }
+
+    const byId =
+        new Map(
+            hand.map(card => [
+                String(card.id),
+                card
+            ])
+        );
+
+    const ordered = [];
+
+    // First restore the player's previous arrangement.
+    for (const id of savedOrder) {
+
+        const card =
+            byId.get(String(id));
+
+        if (card) {
+
+            ordered.push(card);
+
+            byId.delete(String(id));
+        }
+    }
+
+    // Any new cards are appended automatically.
+    for (const card of byId.values()) {
+        ordered.push(card);
+    }
+
+    return ordered;
+},
         // ============================================================
         // APPLY PRIVATE HAND
         // ============================================================
@@ -1699,13 +1810,15 @@ TR.G.deck =
             }
 
 
-            TR.G.players[
-                this.playerIndex
-            ].hand =
+            const incomingHand =
+    this.cardsFromData(hand);
 
-                this.cardsFromData(
-                    hand
-                );
+TR.G.players[
+    this.playerIndex
+].hand =
+    this.applyLocalHandOrder(
+        incomingHand
+    );
 
 
             if (
@@ -1719,33 +1832,26 @@ TR.G.deck =
 
 
         // ============================================================
-        // STATUS
-        // ============================================================
+// STATUS
+// ============================================================
 
-        setStatus(message) {
+setStatus(message) {
 
-            const el =
-                document.getElementById(
-                    'mp-status'
-                );
+    const el =
+        document.getElementById(
+            'mp-status'
+        );
 
+    if (el) {
+        el.textContent = message;
+    }
 
-            if (el) {
-
-                el.textContent =
-                    message;
-            }
-
-
-            if (
-                window.TigrayRamino?.setMessage
-            ) {
-
-                TR.setMessage(
-                    message
-                );
-            }
-        },
+    if (
+        window.TigrayRamino?.setMessage
+    ) {
+        TR.setMessage(message);
+    }
+},
 
 
         // ============================================================

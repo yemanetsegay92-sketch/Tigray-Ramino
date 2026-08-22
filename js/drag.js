@@ -35,9 +35,22 @@ TR.reorderSelectedCards=function(dropIndex){
     }
 
     remaining.splice(insertIndex,0,...movingCards);
-    p.hand=remaining;
-    TR.G.selected=[];
-    TR.renderAll();
+p.hand=remaining;
+
+// ============================================================
+// SAVE LOCAL HAND ORDER — MULTIPLAYER
+// Rearranging cards never uses the network.
+// ============================================================
+if (
+    TR.G.multiplayer &&
+    window.TigrayRaminoMultiplayerGame
+) {
+    window.TigrayRaminoMultiplayerGame
+        .saveLocalHandOrder();
+}
+
+TR.G.selected=[];
+TR.renderAll();
 };
 
 TR.attachCardPointerEvents=function(cardDiv,handIdx){
