@@ -155,39 +155,140 @@ TR.renderTable=function(){
     area.appendChild(openingSlot);
 };
 
+  TR.getMyHandPlayer = function () {
+
+    // Online multiplayer:
+    // Always use the player who owns this device.
+    if (
+        TR.G.multiplayer &&
+        window.TigrayRaminoMultiplayerGame &&
+        Number.isInteger(
+            window.TigrayRaminoMultiplayerGame.playerIndex
+        )
+    ) {
+        return TR.G.players[
+            window.TigrayRaminoMultiplayerGame.playerIndex
+        ];
+    }
+
+    // Local / training:
+    // The current player is the player using the phone.
+    return TR.currentPlayer();
+};
 TR.renderHand=function(){
     const area=TR.dom.handArea;
     area.innerHTML='';
-    const hand=TR.currentPlayer().hand;
+
+    let hand;
+
+    // ============================================================
+    // ONLINE MULTIPLAYER
+    // Always show THIS player's private hand.
+    // Do NOT show the active player's hand.
+    // ============================================================
+
+    if (
+        TR.G.multiplayer &&
+        window.TigrayRaminoMultiplayerGame
+    ) {
+
+        const myIndex =
+            window.TigrayRaminoMultiplayerGame.playerIndex;
+
+        if (
+            Number.isInteger(myIndex) &&
+            TR.G.players[myIndex]
+        ) {
+            hand =
+                TR.G.players[myIndex].hand || [];
+        } else {
+            hand = [];
+        }
+
+    } else {
+
+        // ========================================================
+        // TRAINING / LOCAL GAME
+        // Show the current player's hand.
+        // ========================================================
+
+        const current =
+            TR.currentPlayer();
+
+        hand =
+            current?.hand || [];
+    }
+
+
+    // ============================================================
+    // RENDER 14 HAND SLOTS
+    // ============================================================
 
     for(let slotIdx=0;slotIdx<14;slotIdx++){
+
         const slot=document.createElement('div');
+
         slot.className='hand-slot';
+
         slot.dataset.slot=slotIdx;
 
+
         if(slotIdx>=hand.length){
+
             slot.classList.add('empty-slot');
+
         }else{
+
             const card=hand[slotIdx];
+
             const cardDiv=document.createElement('div');
 
-            cardDiv.className='hand-card'+(TR.isJoker(card)?' joker-hc':'');
+            cardDiv.className=
+                'hand-card' +
+                (TR.isJoker(card)?' joker-hc':'');
+
             cardDiv.dataset.handIdx=slotIdx;
             cardDiv.dataset.slot=slotIdx;
             cardDiv.dataset.cid=card.id;
 
-            if(TR.G.selected.includes(slotIdx))cardDiv.classList.add('selected');
 
-            const textSpan=document.createElement('span');
+            if(
+                TR.G.selected.includes(slotIdx)
+            ){
+                cardDiv.classList.add('selected');
+            }
+
+
+            const textSpan=
+                document.createElement('span');
+
             textSpan.className='card-text';
-            textSpan.textContent=TR.cardShort(card);
-            const cc=TR.colorClass(card);
-            if(cc)textSpan.classList.add(cc);
+
+            textSpan.textContent=
+                TR.cardShort(card);
+
+
+            const cc=
+                TR.colorClass(card);
+
+            if(cc){
+                textSpan.classList.add(cc);
+            }
+
+
             cardDiv.appendChild(textSpan);
 
-            TR.attachCardPointerEvents(cardDiv,slotIdx);
+
+            TR.attachCardPointerEvents(
+                cardDiv,
+                slotIdx
+            );
+
+
             slot.appendChild(cardDiv);
         }
+
+
         area.appendChild(slot);
     }
 };

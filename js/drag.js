@@ -21,7 +21,8 @@ TR.cleanupDrag=function(){
 };
 
 TR.reorderSelectedCards=function(dropIndex){
-    const p=TR.currentPlayer();
+    const p =
+    TR.getMyHandPlayer();
     if(!p||!TR.G.selected.length)return;
 
     const selectedSet=new Set(TR.G.selected);
@@ -68,7 +69,8 @@ TR.attachCardPointerEvents=function(cardDiv,handIdx){
 
             if(!TR.G.selected.includes(handIdx))TR.G.selected=[handIdx];
 
-            const hand=TR.currentPlayer().hand;
+            const hand =
+    TR.getMyHandPlayer().hand;
             const actionCards=TR.G.selected.map(i=>hand[i]).filter(Boolean);
 
             const ghost=document.createElement('div');
@@ -180,7 +182,31 @@ TR.attachCardPointerEvents=function(cardDiv,handIdx){
 
             // IMPORTANT: cleanup BEFORE any action calls renderAll().
             TR.cleanupDrag();
+// ============================================================
+// ONLINE MULTIPLAYER TURN PROTECTION
+//
+// Waiting players ARE allowed to rearrange their own hand.
+// They are NOT allowed to play cards to the table or discard.
+// ============================================================
 
+const onlineWaiting =
+    TR.G.multiplayer &&
+    window.TigrayRaminoMultiplayerGame &&
+    !window.TigrayRaminoMultiplayerGame.isMyTurn();
+
+if (
+    onlineWaiting &&
+    actionTarget !== 'hand'
+) {
+
+    TR.setMessage(
+        '⏳ It is not your turn. You can still arrange your cards.'
+    );
+
+    TR.renderAll();
+
+    return;
+}
             if(actionTarget==='hand'&&toSlotIdx!==null){
                 TR.reorderSelectedCards(toSlotIdx);
             }else if(actionTarget==='combo'){
