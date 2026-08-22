@@ -1,0 +1,11 @@
+<!-- Remove the old script.js reference and use these in this exact order. -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/validation.js"></script>
+<script src="js/joker.js"></script>
+<script src="js/monte.js"></script>
+<script src="js/game.js"></script>
+<script src="js/render.js"></script>
+<script src="js/drag.js"></script>
+<script src="js/main.js"></script>
