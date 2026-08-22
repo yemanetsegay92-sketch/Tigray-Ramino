@@ -1,7 +1,9 @@
 (function () {
 'use strict';
 const TR = window.TigrayRamino;
-
+TR.isOnlineGame=function(){
+    return TR.G.multiplayer === true;
+};
 TR.isEliminated=function(playerIdx){ return TR.G.eliminated.includes(playerIdx); };
 
 TR.eliminatePlayer=function(playerIdx, reason){
@@ -12,7 +14,7 @@ TR.eliminatePlayer=function(playerIdx, reason){
     TR.G.jokerSwapActive=false;
     TR.G.mustOpen=false;
     TR.G.selected=[];
-
+  
     // Remove the eliminated player's table cards from play and return
     // them to the discard pile, just as a failed Monte is handled.
     const allCards=[];
@@ -58,11 +60,13 @@ TR.eliminatePlayer=function(playerIdx, reason){
     }
 
     TR.renderAll();
+    if(!TR.isOnlineGame()){
     TR.showModal(
         `❌ Player ${playerIdx+1} Eliminated`,
         `${reason}\n\n👉 Player ${TR.G.currentPlayer+1}, pass the phone and press "I'm Ready".`,
         true
     );
+    }
     return true;
 };
 
@@ -107,7 +111,13 @@ TR.initGame=function(num){
     if(TR.dom.btnMonteWin) TR.dom.btnMonteWin.textContent='🏆 Monte Win';
     TR.setMessage('🃏 Player 1: Discard one by dragging to discard pile.');
     TR.renderAll();
-    TR.showModal('👤 Player 1',"Pass the phone and press \"I'm Ready\"",true);
+    if(!TR.isOnlineGame()){
+    TR.showModal(
+        '👤 Player 1',
+        'Pass the phone and press "I\'m Ready"',
+        true
+    );
+    }
 };
 
 TR.doDraw=function(){
@@ -444,6 +454,12 @@ TR.doDiscardCard=function(card){
     TR.G.monteWinPending=false;
 
     TR.renderAll();
-    TR.showModal(`👤 Player ${TR.G.currentPlayer+1}`,`Pass the phone and press "I'm Ready"`,true);
+   if(!TR.isOnlineGame()){
+    TR.showModal(
+        `👤 Player ${TR.G.currentPlayer+1}`,
+        `Pass the phone and press "I'm Ready"`,
+        true
+    );
+   } 
 };
 })();
