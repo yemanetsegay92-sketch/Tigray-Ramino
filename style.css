@@ -94,4 +94,157 @@ body { margin: 0; min-height: 100vh; background: #0f2a1a; background-image: radi
 .ramino-mp-players{margin:18px 0;padding:12px;border-radius:14px;background:#f5f5f5;text-align:left}
 .ramino-mp-player{display:flex;align-items:center;gap:9px;padding:10px;border-radius:10px;background:#fff}
 .ramino-mp-player small{margin-left:auto;color:#168a45}.ramino-mp-waiting{padding:14px 10px 4px;color:#777;text-align:center}
-.ramino-mp-status{min-height:22px;margin-top:15px;color:#666;font-size:14px}
+.ramino-mp-status{min-height:22px;margin-top:15px;color:#666666;font-size:14px}
+/* ================================================================
+   TIGRAY RAMINO — WELCOME / MODE SCREEN
+   ================================================================ */
+
+#mode-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background:
+        radial-gradient(circle at 50% 20%, #28663c 0%, transparent 45%),
+        linear-gradient(145deg, #08180d, #12351f 55%, #09180d);
+}
+
+.mode-box {
+    width: min(420px, 100%);
+    padding: 34px 24px 28px;
+    border-radius: 30px;
+    text-align: center;
+
+    background: rgba(29, 74, 42, 0.96);
+
+    border: 2px solid #6fa56a;
+
+    box-shadow:
+        0 25px 70px rgba(0,0,0,.65),
+        inset 0 1px 0 rgba(255,255,255,.12);
+
+    animation: modeBoxIn .35s ease-out;
+}
+
+.mode-box .big-emoji {
+    font-size: 4.5rem;
+    line-height: 1;
+    margin-bottom: 10px;
+
+    filter: drop-shadow(0 8px 10px rgba(0,0,0,.35));
+}
+
+.mode-box h1 {
+    margin: 0;
+    color: #f7e8bd;
+    font-size: 2rem;
+    letter-spacing: .5px;
+}
+
+.mode-box p {
+    margin: 8px 0 25px;
+    color: #c8d9bf;
+    font-size: 1rem;
+}
+
+/* Welcome buttons */
+
+.mode-box .btn-big {
+    width: 100%;
+    min-height: 58px;
+
+    margin-top: 12px;
+    padding: 12px 18px;
+
+    border: 0;
+    border-radius: 16px;
+
+    font-size: 1.05rem;
+    font-weight: 800;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 5px 0 rgba(0,0,0,.25),
+        0 8px 20px rgba(0,0,0,.18);
+
+    transition:
+        transform .08s ease,
+        filter .15s ease;
+}
+
+.mode-box .btn-big:active {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 rgba(0,0,0,.25);
+}
+
+.mode-box .btn-big:hover {
+    filter: brightness(1.08);
+}
+
+/* Online */
+
+#btn-online {
+    background: linear-gradient(135deg, #35b968, #168a45);
+    color: white;
+    border-bottom: 4px solid #0b612f;
+}
+
+/* Training */
+
+#btn-training {
+    background: linear-gradient(135deg, #f7d44a, #d9ad25);
+    color: #24351e;
+    border-bottom: 4px solid #9d7c16;
+}
+
+/* How to play */
+
+#btn-how-to-play {
+    background: rgba(245,236,218,.12);
+    color: #e9e2cf;
+    border: 1px solid rgba(245,236,218,.25);
+    box-shadow: none;
+}
+
+#btn-how-to-play:hover {
+    background: rgba(245,236,218,.18);
+}
+
+/* Small phone screens */
+
+@media (max-width: 380px) {
+
+    .mode-box {
+        padding: 28px 18px 22px;
+        border-radius: 25px;
+    }
+
+    .mode-box .big-emoji {
+        font-size: 3.8rem;
+    }
+
+    .mode-box h1 {
+        font-size: 1.7rem;
+    }
+
+    .mode-box .btn-big {
+        min-height: 54px;
+        font-size: .98rem;
+    }
+}
+
+@keyframes modeBoxIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px) scale(.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
