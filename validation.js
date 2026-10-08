@@ -43,11 +43,21 @@ TR.validateSeq = function (cards) {
         }
 
         if (internalGap) return {min:vals[0], max:vals[vals.length-1]};
-        return {min:vals[0], max:vals[vals.length-1]+1};
+        const upper = aceHigh ? 14 : 13;
+        const lower = aceHigh ? 2 : 1;
+        if (vals[vals.length-1] < upper)
+            return {min:vals[0], max:vals[vals.length-1]+1};
+        if (vals[0] > lower)
+            return {min:vals[0]-1, max:vals[vals.length-1]};
+        return null;
     }
 
-    let r = check(false);
-    let aceHigh = false;
+    // A Joker in J-Q-K-Joker represents A for the four-image opening.
+    const imageSequence=cards.length===4 && jok.length===1 &&
+        non.every(c=>['J','Q','K','A'].includes(c.rank));
+    let r = imageSequence ? check(true) : check(false);
+    let aceHigh = imageSequence;
+    if(!r && imageSequence){r=check(false);aceHigh=false;}
     if (!r) {
         r = check(true);
         aceHigh = true;

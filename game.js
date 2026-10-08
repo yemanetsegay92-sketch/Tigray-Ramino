@@ -1,6 +1,22 @@
 (function () {
 'use strict';
 const TR = window.TigrayRamino;
+TR.isOnlineGame=function(){
+    return TR.G.multiplayer === true;
+};
+TR.isMonteTurn=function(){
+    return TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer;
+};
+TR.canPlayCards=function(){
+    if(TR.G.firstDiscardPending){
+        TR.setMessage('⚠️ The starting player must discard first.'); return false;
+    }
+    if(TR.G.winner!==null || TR.G.phase!=='discard'){
+        TR.setMessage('⚠️ Draw or take a card before playing cards.'); return false;
+    }
+    const mp=window.TigrayRaminoMultiplayerGame;
+    return !TR.isOnlineGame() || (mp && mp.playerIndex===TR.G.currentPlayer);
+};
 
 TR.isEliminated=function(playerIdx){ return TR.G.eliminated.includes(playerIdx); };
 
@@ -11,7 +27,11 @@ TR.eliminatePlayer=function(playerIdx, reason){
     TR.G.eliminated.push(playerIdx);
     TR.G.jokerSwapActive=false;
     TR.G.mustOpen=false;
+    TR.G.openingAttempt=false;
     TR.G.selected=[];
+    if(TR.G.montePlayer===playerIdx){
+        TR.G.monteMode=false; TR.G.montePlayer=null; TR.G.monteWinPending=false;
+    }
 
     // Remove the eliminated player's table cards from play and return
     // them to the discard pile, just as a failed Monte is handled.
@@ -58,11 +78,13 @@ TR.eliminatePlayer=function(playerIdx, reason){
     }
 
     TR.renderAll();
+    if(!TR.isOnlineGame()){
     TR.showModal(
         `❌ Player ${playerIdx+1} Eliminated`,
         `${reason}\n\n👉 Player ${TR.G.currentPlayer+1}, pass the phone and press "I'm Ready".`,
         true
     );
+    }
     return true;
 };
 
@@ -82,8 +104,10 @@ TR.initGame=function(num){
     TR.G.currentPlayer=0;
     TR.G.winner=null;
     TR.G.phase='discard';
+    TR.G.firstDiscardPending=true;
     TR.G.selected=[];
     TR.G.mustOpen=false;
+    TR.G.openingAttempt=false;
     TR.G.lastDiscardJoker=false;
     TR.G.monteMode=false;
     TR.G.montePlayer=null;
@@ -107,7 +131,13 @@ TR.initGame=function(num){
     if(TR.dom.btnMonteWin) TR.dom.btnMonteWin.textContent='🏆 Monte Win';
     TR.setMessage('🃏 Player 1: Discard one by dragging to discard pile.');
     TR.renderAll();
-    TR.showModal('👤 Player 1',"Pass the phone and press \"I'm Ready\"",true);
+    if(!TR.isOnlineGame()){
+    TR.showModal(
+        '👤 Player 1',
+        'Pass the phone and press "I\'m Ready"',
+        true
+    );
+    }
 };
 
 TR.doDraw=function(){
@@ -136,7 +166,7 @@ TR.doTakeDiscard=function(){
     if(!p)return;
     if(p.hand.length>=14){TR.setMessage('⚠️ Hand full (14). Cannot take.');return;}
 
-    if(!TR.isOpened(TR.G.currentPlayer)){
+    if(!TR.isOpened(TR.G.currentPlayer) && !TR.isMonteTurn()){
         TR.G.mustOpen=true;
         TR.setMessage('📥 Took discard. You MUST open before discarding!');
     }else{
@@ -151,12 +181,15 @@ TR.doTakeDiscard=function(){
 
 TR.doOpenCombo=function(cards){
     if(TR.G.winner!==null)return;
-    if(TR.G.phase!=='draw'&&TR.G.phase!=='discard')return;
+    if(!TR.canPlayCards())return;
 
     const p=TR.currentPlayer();
     if(!p)return;
     if(cards.length<2){TR.setMessage('⚠️ Need at least 2 cards');return;}
 
+    if(new Set(cards.map(c=>c.id)).size!==cards.length){
+        TR.setMessage('❌ A card cannot be used twice.'); return;
+    }
     const handIds=new Set(p.hand.map(c=>c.id));
     for(const card of cards){
         if(!handIds.has(card.id)){
@@ -171,8 +204,8 @@ TR.doOpenCombo=function(cards){
     if(!result.valid){result=TR.validateGroup(cards);type='group';}
 
     if(!result.valid){
-        if(!TR.G.monteMode){
-            TR.setMessage(`❌ ${result.reason}. Pairs are only allowed in Monte mode. Tap "Declare Monte" first.`);
+        if(!TR.isMonteTurn()){
+            TR.setMessage(`❌ ${result.reason}. Pairs are only allowed in Monte mode. Tap "Monte Win" first.`);
             return;
         }
         result=TR.validatePair(cards);
@@ -190,21 +223,20 @@ TR.doOpenCombo=function(cards){
         points:result.points,
         displayCards:TR.computeComboDisplay(cards,type)
     };
+    if(!p.opened && !TR.isMonteTurn()) TR.G.openingAttempt=true;
     p.combos.push(combo);
     TR.G.selected=[];
 
-    const pts=TR.totalPoints(TR.G.currentPlayer);
-    const combos=p.combos.length;
-    const opened=(pts>=41||combos>=3);
-
-    if(opened){
+    const opening=TR.openingStatus(TR.G.currentPlayer);
+    if(!TR.isMonteTurn() && opening.valid){
         p.opened=true;
         TR.G.mustOpen=false;
-        TR.setMessage(pts>=41?`✅ Opened! (${pts} pts)`:`✅ Opened! (${combos} combos)`);
-    }else if(TR.G.mustOpen){
-        TR.setMessage(`⚠️ Need 41 pts or 3 combos to open! (${pts} pts, ${combos} combos)`);
+        TR.G.openingAttempt=false;
+        TR.setMessage(opening.images?'✅ Opened with four images!':`✅ Opened! (${opening.points} pts, ${opening.count} combos)`);
+    }else if(TR.isMonteTurn()){
+        TR.setMessage('🏆 Monte: finish 5 pairs + 1 trio and discard this turn, or be eliminated.');
     }else{
-        TR.setMessage(`✅ Combo added. (${pts} pts, ${combos} combos)`);
+        TR.setMessage(`⚠️ Complete 41 points, 3 combos, or four images before discarding, or be eliminated. (${opening.points} pts, ${opening.count} combos)`);
     }
 
     // A turn can NEVER be won by opening alone. If the player's hand
@@ -223,13 +255,13 @@ TR.doOpenCombo=function(cards){
 
 TR.doAddToCombo=function(card,targetPlayerIdx,targetComboIdx){
     if(TR.G.winner!==null)return;
-    if(TR.G.phase!=='draw'&&TR.G.phase!=='discard')return;
+    if(!TR.canPlayCards())return;
 
     const p=TR.currentPlayer();
     if(!p)return;
 
     if(!TR.isOpened(TR.G.currentPlayer)){
-        TR.setMessage('❌ You must be opened (41 pts or 3 combos) to add to combos');
+        TR.setMessage('❌ You must be opened (41 pts, 3 combos, or four images) to add to combos');
         return;
     }
 
@@ -321,20 +353,16 @@ TR.doDiscardCard=function(card){
     const p=TR.currentPlayer();
     if(!p)return;
 
-    if(TR.G.mustOpen){
-        TR.setMessage('⚠️ You MUST open (41 pts or 3 combos) before discarding!');
-        return;
-    }
-
     const idx=p.hand.findIndex(c=>c.id===card.id);
     if(idx===-1)return;
 
     p.hand.splice(idx,1);
+    TR.G.firstDiscardPending=false;
     TR.G.discardPile.push(card);
     TR.G.lastDiscardJoker=TR.isJoker(card);
     TR.G.selected=[];
 
-    if(TR.G.monteMode && TR.G.montePlayer===TR.G.currentPlayer && p.hand.length===0){
+    if(TR.isMonteTurn()){
         const result=TR.validateMonte(TR.G.currentPlayer);
 
         if(result.valid){
@@ -354,36 +382,12 @@ TR.doDiscardCard=function(card){
             return;
         }
 
-        const reason=result.reason;
-        const allCards=[];
-        for(const combo of p.combos)for(const c of combo.cards)allCards.push(c);
-        p.combos=[];
-        TR.G.discardPile=TR.G.discardPile.concat(allCards);
-        TR.G.eliminated.push(TR.G.currentPlayer);
-        TR.G.monteMode=false;
-        TR.G.montePlayer=null;
-        TR.G.monteWinPending=false;
+        TR.eliminatePlayer(TR.G.currentPlayer,'Monte must win this turn: '+result.reason);
+        return;
+    }
 
-        const active=TR.G.players.filter((_,i)=>!TR.G.eliminated.includes(i));
-
-        if(active.length===1){
-            const winnerIdx=TR.G.players.findIndex((_,i)=>!TR.G.eliminated.includes(i));
-            TR.G.winner=winnerIdx;
-            TR.setMessage(`🏆 Player ${winnerIdx+1} wins! (opponent eliminated)`);
-            TR.renderAll();
-            TR.showModal('🎉 WINNER!',`Player ${winnerIdx+1} wins!`,false);
-            return;
-        }
-
-        TR.G.currentPlayer=(TR.G.currentPlayer+1)%TR.G.numPlayers;
-        while(TR.G.eliminated.includes(TR.G.currentPlayer))
-            TR.G.currentPlayer=(TR.G.currentPlayer+1)%TR.G.numPlayers;
-
-        TR.G.phase='draw';
-        TR.G.selected=[];
-        TR.setMessage(`❌ Monte rejected: ${reason}. Player ${TR.G.currentPlayer+1}'s turn.`);
-        TR.renderAll();
-        TR.showModal('❌ Monte Failed',`Reason: ${reason}. Player eliminated.`,true);
+    if((TR.G.mustOpen || TR.G.openingAttempt) && !TR.isOpened(TR.G.currentPlayer)){
+        TR.eliminatePlayer(TR.G.currentPlayer,'Opening was not completed in this turn (41 points, 3 combinations, or four images).');
         return;
     }
 
@@ -439,11 +443,18 @@ TR.doDiscardCard=function(card){
     }
 
     TR.G.mustOpen=false;
+    TR.G.openingAttempt=false;
     TR.G.selected=[];
     TR.G.jokerSwapActive=false;
     TR.G.monteWinPending=false;
 
     TR.renderAll();
-    TR.showModal(`👤 Player ${TR.G.currentPlayer+1}`,`Pass the phone and press "I'm Ready"`,true);
+   if(!TR.isOnlineGame()){
+    TR.showModal(
+        `👤 Player ${TR.G.currentPlayer+1}`,
+        `Pass the phone and press "I'm Ready"`,
+        true
+    );
+   }
 };
 })();

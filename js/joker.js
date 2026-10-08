@@ -2,57 +2,19 @@
 'use strict';
 const TR = window.TigrayRamino;
 
-TR.computeSequenceDisplay = function (cards, aceHigh) {
-    const non=cards.filter(c=>!TR.isJoker(c));
-    const jok=cards.filter(c=>TR.isJoker(c));
-    const sorted=non.slice().sort((a,b)=>
-        (TR.numVal(a.rank,aceHigh)||0)-(TR.numVal(b.rank,aceHigh)||0)
-    );
-    const vals=sorted.map(c=>TR.numVal(c.rank,aceHigh));
-    const suit=non[0].suit;
-    let result=[];
-
-    if (!jok.length) {
-        return sorted.map(c=>({card:c,displayRank:c.rank,displaySuit:c.suit,ambiguous:false}));
+TR.computeSequenceDisplay = function (cards) {
+    const result=TR.validateSeq(cards);
+    if(!result.valid) return [];
+    const real=cards.filter(c=>!TR.isJoker(c));
+    const joker=cards.find(c=>TR.isJoker(c));
+    const suit=real[0].suit;
+    const display=[];
+    for(let value=result.min;value<=result.max;value++){
+        const rank=TR.RANKS.find(r=>TR.numVal(r,result.aceHigh)===value);
+        const card=real.find(c=>c.rank===rank) || joker;
+        display.push({card,displayRank:rank,displaySuit:suit,ambiguous:false});
     }
-
-    const jokerCard=jok[0];
-    let inserted=false;
-
-    for (let i=0;i<sorted.length;i++) {
-        if (i>0 && vals[i]-vals[i-1]===2 && !inserted) {
-            const missingValue=vals[i-1]+1;
-            const missingRank=TR.RANKS.find(r=>TR.numVal(r,aceHigh)===missingValue);
-            if (missingRank) {
-                result.push({card:jokerCard,displayRank:missingRank,displaySuit:suit,ambiguous:false});
-                inserted=true;
-            }
-        }
-        result.push({
-            card:sorted[i],displayRank:sorted[i].rank,displaySuit:sorted[i].suit,ambiguous:false
-        });
-    }
-
-    if (!inserted) {
-        const missingValue=vals[vals.length-1]+1;
-        const missingRank=TR.RANKS.find(r=>TR.numVal(r,aceHigh)===missingValue);
-        if (missingRank) {
-            result.push({card:jokerCard,displayRank:missingRank,displaySuit:suit,ambiguous:false});
-            inserted=true;
-        }
-    }
-
-    if (!inserted) {
-        const missingValue=vals[0]-1;
-        const missingRank=TR.RANKS.find(r=>TR.numVal(r,aceHigh)===missingValue);
-        if (missingRank) {
-            result.unshift({card:jokerCard,displayRank:missingRank,displaySuit:suit,ambiguous:false});
-            inserted=true;
-        }
-    }
-
-    if (!inserted) result.push({card:jokerCard,displayRank:'?',displaySuit:suit,ambiguous:false});
-    return result;
+    return display;
 };
 
 TR.sortGroupCards = function (cards) {
@@ -73,17 +35,7 @@ TR.computeGroupDisplay = function (cards) {
 };
 
 TR.computeComboDisplay = function (cards,type) {
-    if (type==='sequence') {
-        let aceHigh=false;
-        const non=cards.filter(c=>!TR.isJoker(c));
-        if (non.length>=2) {
-            const vals=non.map(c=>TR.numVal(c.rank,false)).filter(v=>v!==null).sort((a,b)=>a-b);
-            let works=true;
-            for(let i=1;i<vals.length;i++) if(vals[i]-vals[i-1]!==1) works=false;
-            if(!works) aceHigh=true;
-        }
-        return TR.computeSequenceDisplay(cards,aceHigh);
-    }
+    if (type==='sequence') return TR.computeSequenceDisplay(cards);
 
     if(type==='group') return TR.computeGroupDisplay(cards);
 
@@ -100,11 +52,19 @@ TR.computeComboDisplay = function (cards,type) {
     return cards.map(c=>({card:c,displayRank:c.rank,displaySuit:c.suit,ambiguous:false}));
 };
 
-TR.isOpened = function (playerIdx) {
+// Opening is earned in one turn and remains permanent afterwards.
+TR.openingStatus = function (playerIdx) {
     const p=TR.G.players[playerIdx];
-    if(!p) return false;
-    if(p.opened) return true;
-    return TR.totalPoints(playerIdx)>=41 || p.combos.length>=3;
+    if(!p) return {valid:false};
+    const combos=p.combos.filter(c=>c.type==='sequence'||c.type==='group');
+    const points=combos.reduce((sum,c)=>sum+(c.points||0),0);
+    const images=combos.some(c=>c.cards.length===4 &&
+        TR.computeComboDisplay(c.cards,c.type).every(d=>['J','Q','K','A'].includes(d.displayRank)));
+    return {valid:points>=41 || combos.length>=3 || images,points,count:combos.length,images};
+};
+
+TR.isOpened = function (playerIdx) {
+    return !!TR.G.players[playerIdx]?.opened;
 };
 
 TR.totalPoints = function (pidx) {
@@ -115,7 +75,7 @@ TR.totalPoints = function (pidx) {
 
 TR.canSwapJoker = function (playerIdx) {
     const p=TR.G.players[playerIdx];
-    if(!p || !TR.isOpened(playerIdx) || p.hand.length===0) return null;
+    if(TR.isMonteTurn() || !p || !TR.isOpened(playerIdx) || p.hand.length===0) return null;
 
     for(let pi=0;pi<TR.G.players.length;pi++){
         const pl=TR.G.players[pi];
@@ -127,7 +87,7 @@ TR.canSwapJoker = function (playerIdx) {
 
             for(let i=0;i<combo.cards.length;i++){
                 if(!TR.isJoker(combo.cards[i])) continue;
-                const jd=display[i];
+                const jd=display.find(d=>d.card.id===combo.cards[i].id);
                 if(!jd) continue;
 
                 const matching=p.hand.find(card=>
@@ -144,6 +104,7 @@ TR.canSwapJoker = function (playerIdx) {
 };
 
 TR.doJokerSwap = function () {
+    if(!TR.canPlayCards() || TR.isMonteTurn()) return false;
     const idx=TR.G.currentPlayer;
     const p=TR.G.players[idx];
     if(!p || !TR.isOpened(idx)) return false;
@@ -177,6 +138,10 @@ TR.doJokerSwap = function () {
 };
 
 TR.tryJokerSwap = function(targetPlayerIdx,targetComboIdx,jokerCardIdx){
+    if(!TR.canPlayCards()) return;
+    if(TR.isMonteTurn()){
+        TR.setMessage('❌ Joker replacement is not allowed in Monte.'); return;
+    }
     const p=TR.currentPlayer();
     if(!p || TR.G.selected.length!==1) return;
 
@@ -201,7 +166,7 @@ TR.tryJokerSwap = function(targetPlayerIdx,targetComboIdx,jokerCardIdx){
     if(!joker || !TR.isJoker(joker)) return;
 
     const display=combo.displayCards || TR.computeComboDisplay(combo.cards,combo.type);
-    const jd=display[jokerCardIdx];
+    const jd=display.find(d=>d.card.id===joker.id);
 
     if(!jd || !jd.displayRank || !jd.displaySuit){
         TR.setMessage('❌ This Joker has no valid representation.');
