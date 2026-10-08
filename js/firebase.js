@@ -10,7 +10,8 @@ import {
     getDoc,
     updateDoc,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    runTransaction
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -33,7 +34,8 @@ window.RaminoFirebase = {
     getDoc,
     updateDoc,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    runTransaction
 };
 
 window.dispatchEvent(new Event('ramino-firebase-ready'));

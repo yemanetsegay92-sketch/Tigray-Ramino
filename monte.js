@@ -118,11 +118,18 @@ TR.askNextMonteApproval=function(){
 // the Monte combination valid, the system declares the win automatically.
 TR.doMonteWin=function(){
     if(TR.G.winner!==null)return;
+    if(TR.G.firstDiscardPending){
+        TR.setMessage('⚠️ The starting player must discard first.'); return;
+    }
     if(TR.G.monteRequest){
         TR.setMessage('🎰 A Monte restart request is already in progress.');
         return;
     }
     if(TR.G.phase!=='draw'&&TR.G.phase!=='discard')return;
+    if(TR.isOnlineGame() && window.TigrayRaminoMultiplayerGame?.playerIndex!==TR.G.currentPlayer)return;
+    if(TR.G.jokerSwapActive){
+        TR.setMessage('❌ You cannot attempt Monte after replacing a Joker.'); return;
+    }
 
     const playerIdx=TR.G.currentPlayer;
 
@@ -138,10 +145,12 @@ TR.doMonteWin=function(){
         return;
     }
 
+    TR.G.mustOpen=false;
+    TR.G.openingAttempt=false;
     TR.G.monteMode=true;
     TR.G.montePlayer=playerIdx;
     TR.G.monteWinPending=false;
-    TR.setMessage(`🏆 Player ${playerIdx+1}: Monte Win active. Finish 5 pairs + 1 trio and discard your final card. The system will decide automatically.`);
+    TR.setMessage(`🏆 Player ${playerIdx+1}: Monte Win active. Finish 5 pairs + 1 trio and discard your final card. You must win this turn or be eliminated.`);
     TR.renderAll();
 };
 })();

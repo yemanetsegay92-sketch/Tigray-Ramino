@@ -13,11 +13,8 @@
    - Current player is synchronized
    - Existing Ramino engine/rules are preserved
 
-   NOT YET:
-   - Full combo synchronization
-   - Full joker synchronization
-   - Full Monte synchronization
-   - Full win synchronization
+   Turn actions publish public combinations and the private hand atomically.
+   Opening attempts, Joker swaps, Monte and elimination are synchronized.
    ================================================================ */
 
 (function () {
@@ -44,9 +41,7 @@
         syncing: false,
         patched: false,
 
-        originalDraw: null,
-        originalTakeDiscard: null,
-        originalDiscard: null,
+        originalActions: null,
 
 
         // ============================================================
@@ -527,6 +522,10 @@ TR.G.multiplayer = true;
 
             const publicState = {
 
+                revision:0,
+                openingAttempt:false,
+                firstDiscardPending:true,
+                jokerSwapActive:false,
                 status:
                     'playing',
 
@@ -583,12 +582,7 @@ TR.G.multiplayer = true;
                     Firebase.serverTimestamp()
             };
 
-console.log(
-    '🔥 HOST WRITING DECK:',
-    publicState.deck,
-    'COUNT:',
-    publicState.deck.length
-);
+
             await Firebase.setDoc(
                 gameRef,
                 publicState
@@ -626,7 +620,7 @@ console.log(
             return true;
         },
 
-            
+
         // ============================================================
         // ENTER ONLINE GAME — NON-HOST PLAYERS
         // ============================================================
@@ -700,72 +694,19 @@ console.log(
         // ============================================================
 
         patchActions() {
-
-            if (this.patched) {
-                return;
+            if(this.patched)return;
+            this.patched=true;
+            this.originalActions={};
+            for(const name of ['doDraw','doTakeDiscard','doDiscardCard','doOpenCombo',
+                'doAddToCombo','tryJokerSwap','doJokerSwap','doMonteWin']){
+                const original=TR[name];
+                this.originalActions[name]=original;
+                TR[name]=(...args)=>{
+                    if(!TR.G.multiplayer)return original.apply(TR,args);
+                    return this.requestAction(name,args);
+                };
             }
-
-
-            this.patched =
-                true;
-
-
-            // --------------------------------------------------------
-            // SAVE ORIGINAL FUNCTIONS
-            // --------------------------------------------------------
-
-            const originalDraw =
-                TR.doDraw;
-
-            const originalTakeDiscard =
-                TR.doTakeDiscard;
-
-            const originalDiscard =
-                TR.doDiscardCard;
-
-
-            this.originalDraw =
-                originalDraw;
-
-            this.originalTakeDiscard =
-                originalTakeDiscard;
-
-            this.originalDiscard =
-                originalDiscard;
-
-
-            // --------------------------------------------------------
-            // DRAW
-            // --------------------------------------------------------
-
-            TR.doDraw = () => {
-
-                this.requestDraw();
-            };
-
-
-            // --------------------------------------------------------
-            // TAKE DISCARD
-            // --------------------------------------------------------
-
-            TR.doTakeDiscard = () => {
-
-                this.requestTakeDiscard();
-            };
-
-
-            // --------------------------------------------------------
-            // DISCARD
-            // --------------------------------------------------------
-
-            TR.doDiscardCard = (card) => {
-
-                this.requestDiscard(
-                    card
-                );
-            };
         },
-
 
         // ============================================================
         // CHECK MY TURN
@@ -787,459 +728,80 @@ console.log(
         },
 
 
-        // ============================================================
-        // REQUEST DRAW
-        // ============================================================
-
-        async requestDraw() {
-
-            if (this.syncing) {
-                return;
+        async requestAction(name,args) {
+            if(this.syncing)return;
+            if(!this.isMyTurn()){
+                this.setStatus('⏳ It is not your turn.'); return;
             }
-
-
-            if (!this.isMyTurn()) {
-
-                this.setStatus(
-                    '⏳ It is not your turn.'
-                );
-
-                return;
-            }
-
-
-            if (TR.G.phase !== 'draw') {
-
-                this.setStatus(
-                    '⚠️ You must discard first.'
-                );
-
-                return;
-            }
-
-
-            if (!TR.G.deck.length) {
-
-                this.setStatus(
-                    '⚠️ Deck empty!'
-                );
-
-                return;
-            }
-
-
-            this.syncing =
-                true;
-
-
-            try {
-
-                this.originalDraw.call(
-                    TR
-                );
-
-
-                await this.publishCurrentState();
-
-
-            } catch (error) {
-
-                console.error(
-                    'Multiplayer draw error:',
-                    error
-                );
-
-                this.setStatus(
-                    '❌ Draw failed: ' +
-                    error.message
-                );
-
-
-            } finally {
-
-                this.syncing =
-                    false;
-            }
-        },
-
-
-        // ============================================================
-        // REQUEST TAKE DISCARD
-        // ============================================================
-
-        async requestTakeDiscard() {
-
-            if (this.syncing) {
-                return;
-            }
-
-
-            if (!this.isMyTurn()) {
-
-                this.setStatus(
-                    '⏳ It is not your turn.'
-                );
-
-                return;
-            }
-
-
-            if (TR.G.phase !== 'draw') {
-
-                this.setStatus(
-                    '⚠️ You must discard first.'
-                );
-
-                return;
-            }
-
-
-            if (!TR.G.discardPile.length) {
-
-                this.setStatus(
-                    '⚠️ No card to take.'
-                );
-
-                return;
-            }
-
-
-            this.syncing =
-                true;
-
-
-            try {
-
-                this.originalTakeDiscard.call(
-                    TR
-                );
-
-
-                await this.publishCurrentState();
-
-
-            } catch (error) {
-
-                console.error(
-                    'Multiplayer take-discard error:',
-                    error
-                );
-
-                this.setStatus(
-                    '❌ Take failed: ' +
-                    error.message
-                );
-
-
-            } finally {
-
-                this.syncing =
-                    false;
-            }
-        },
-
-
-        // ============================================================
-        // REQUEST DISCARD
-        // ============================================================
-
-        async requestDiscard(card) {
-
-            if (this.syncing) {
-                return;
-            }
-
-
-            if (!this.isMyTurn()) {
-
-                this.setStatus(
-                    '⏳ It is not your turn.'
-                );
-
-                return;
-            }
-
-
-            if (TR.G.phase !== 'discard') {
-
-                this.setStatus(
-                    '⚠️ You must draw or take discard first.'
-                );
-
-                return;
-            }
-
-
-            if (!card) {
-                return;
-            }
-
-
-            this.syncing =
-                true;
-
-
-            try {
-
-                const beforePlayer =
-                    TR.G.currentPlayer;
-
-
-                this.originalDiscard.call(
-                    TR,
-                    card
-                );
-
-
-                await this.publishCurrentState();
-
-
-                if (
-                    TR.G.winner === null &&
-                    TR.G.currentPlayer !==
-                    beforePlayer
-                ) {
-
-                    this.setStatus(
-
-                        TR.G.currentPlayer ===
-                        this.playerIndex
-
-                            ? '👉 Your turn.'
-
-                            : `⏳ Waiting for Player ${
-                                TR.G.currentPlayer + 1
-                              }...`
-                    );
+            const before=JSON.parse(JSON.stringify(TR.G));
+            this.syncing=true;
+            try{
+                this.originalActions[name].apply(TR,args);
+                if(JSON.stringify(TR.G)!==JSON.stringify(before)){
+                    await this.publishCurrentState(before);
                 }
-
-
-            } catch (error) {
-
-                console.error(
-                    'Multiplayer discard error:',
-                    error
-                );
-
-                this.setStatus(
-                    '❌ Discard failed: ' +
-                    error.message
-                );
-
-
-            } finally {
-
-                this.syncing =
-                    false;
+            }catch(error){
+                TR.G=before;
+                this.setStatus('❌ Action was not saved: '+error.message);
+            }finally{
+                // Suppress intermediate snapshots, then refresh state and hand.
+                try{
+                    const F=await this.waitForFirebase();
+                    const [game,hand]=await Promise.all([
+                        F.getDoc(F.doc(F.db,'rooms',this.roomId,'game','state')),
+                        F.getDoc(F.doc(F.db,'rooms',this.roomId,'privateHands',this.playerId))
+                    ]);
+                    this.syncing=false;
+                    if(game.exists())this.applyPublicState(game.data());
+                    if(hand.exists())this.applyPrivateHand(hand.data().hand||[]);
+                }catch(error){
+                    this.syncing=false;
+                    this.setStatus('⚠️ Connection interrupted. Reconnect before continuing.');
+                }
             }
         },
 
-
-        // ============================================================
-        // PUBLISH CURRENT STATE
-        // ============================================================
-
-        async publishCurrentState() {
-
-            const Firebase =
-                await this.waitForFirebase();
-
-
-            const db =
-                Firebase.db;
-
-
-            const gameRef =
-                Firebase.doc(
-                    db,
-                    'rooms',
-                    this.roomId,
-                    'game',
-                    'state'
-                );
-
-
-            const privateRef =
-                Firebase.doc(
-                    db,
-                    'rooms',
-                    this.roomId,
-                    'privateHands',
-                    this.playerId
-                );
-
-
-            // --------------------------------------------------------
-            // MY PLAYER
-            // --------------------------------------------------------
-
-            const myPlayer =
-                TR.G.players[
-                    this.playerIndex
-                ];
-
-
-            if (!myPlayer) {
-
-                throw new Error(
-                    'Local player state not found.'
-                );
-            }
-
-
-            // --------------------------------------------------------
-            // READ CURRENT PUBLIC STATE
-            // --------------------------------------------------------
-
-            const gameSnap =
-                await Firebase.getDoc(
-                    gameRef
-                );
-
-
-            if (!gameSnap.exists()) {
-
-                throw new Error(
-                    'Multiplayer game state not found.'
-                );
-            }
-
-
-            const currentState =
-                gameSnap.data();
-
-
-            const publicPlayers =
-                Array.isArray(
-                    currentState.players
-                )
-                    ? currentState.players
-                        .map(p => ({
-                            ...p
-                        }))
-                    : [];
-
-
-            // --------------------------------------------------------
-            // UPDATE OUR PUBLIC PLAYER DATA
-            // --------------------------------------------------------
-
-            if (
-                publicPlayers[
-                    this.playerIndex
-                ]
-            ) {
-
-                publicPlayers[
-                    this.playerIndex
-                ].handCount =
-                    myPlayer.hand.length;
-
-                publicPlayers[
-                    this.playerIndex
-                ].opened =
-                    !!myPlayer.opened;
-
-                publicPlayers[
-                    this.playerIndex
-                ].combos =
-                    (myPlayer.combos || [])
-                        .map(combo =>
-                            this.comboData(combo)
-                        );
-            }
-
-
-            // ========================================================
-            // PUBLIC UPDATE
-            // ========================================================
-
-            const update = {
-
-                currentPlayer:
-                    TR.G.currentPlayer,
-
-                phase:
-                    TR.G.phase,
-
-                deck:
-                    this.cardsData(
-                        TR.G.deck
-                    ),
-
-                deckCount:
-                    TR.G.deck.length,
-
-                discardPile:
-                    this.cardsData(
-                        TR.G.discardPile
-                    ),
-
-                players:
-                    publicPlayers,
-
-                winner:
-                    TR.G.winner,
-
-                eliminated:
-                    Array.isArray(
-                        TR.G.eliminated
-                    )
-                        ? TR.G.eliminated.slice()
-                        : [],
-
-                lastDiscardJoker:
-                    !!TR.G.lastDiscardJoker,
-
-                monteMode:
-                    !!TR.G.monteMode,
-
-                montePlayer:
-                    TR.G.montePlayer,
-
-                mustOpen:
-                    !!TR.G.mustOpen,
-
-                updatedAt:
-                    Firebase.serverTimestamp()
+        async publishCurrentState(before) {
+            const F=await this.waitForFirebase();
+            const gameRef=F.doc(F.db,'rooms',this.roomId,'game','state');
+            const privateRef=F.doc(F.db,'rooms',this.roomId,'privateHands',this.playerId);
+            const myPlayer=TR.G.players[this.playerIndex];
+            if(!myPlayer)throw new Error('Local player state not found.');
+            const update={
+                currentPlayer:TR.G.currentPlayer, phase:TR.G.phase,
+                deck:this.cardsData(TR.G.deck), deckCount:TR.G.deck.length,
+                discardPile:this.cardsData(TR.G.discardPile), winner:TR.G.winner,
+                eliminated:TR.G.eliminated.slice(), lastDiscardJoker:!!TR.G.lastDiscardJoker,
+                monteMode:!!TR.G.monteMode, montePlayer:TR.G.montePlayer,
+                mustOpen:!!TR.G.mustOpen, openingAttempt:!!TR.G.openingAttempt,
+                firstDiscardPending:!!TR.G.firstDiscardPending,
+                jokerSwapActive:!!TR.G.jokerSwapActive,
+                revision:(before.networkRevision||0)+1, updatedAt:F.serverTimestamp()
             };
-
-
-            await Firebase.updateDoc(
-                gameRef,
-                update
-            );
-
-
-            // ========================================================
-            // PRIVATE HAND
-            // ========================================================
-
-            await Firebase.setDoc(
-                privateRef,
-                {
-
-                    playerId:
-                        this.playerId,
-
-                    hand:
-                        this.cardsData(
-                            myPlayer.hand
-                        ),
-
-                    handCount:
-                        myPlayer.hand.length,
-
-                    updatedAt:
-                        Firebase.serverTimestamp()
+            const hand={playerId:this.playerId,hand:this.cardsData(myPlayer.hand),
+                handCount:myPlayer.hand.length,updatedAt:F.serverTimestamp()};
+            // Retrying a transaction never repeats the local draw/discard.
+            await F.runTransaction(F.db,async transaction=>{
+                const snapshot=await transaction.get(gameRef);
+                if(!snapshot.exists())throw new Error('Game not found.');
+                const current=snapshot.data();
+                if((current.revision||0)!==(before.networkRevision||0) ||
+                    current.currentPlayer!==this.playerIndex || current.winner!=null ||
+                    current.phase!==before.phase){
+                    throw new Error('The game changed. Your hand has been refreshed; try again.');
                 }
-            );
+                update.players=TR.G.players.map((player,index)=>({
+                    ...(current.players[index]||{}),
+                    opened:!!player.opened,
+                    combos:(player.combos||[]).map(combo=>this.comboData(combo)),
+                    handCount:index===this.playerIndex?myPlayer.hand.length:
+                        (current.players[index]?.handCount||0)
+                }));
+                transaction.update(gameRef,update);
+                transaction.set(privateRef,hand);
+            });
+            TR.G.networkRevision=update.revision;
         },
-
-
-        // ============================================================
-        // LISTEN TO GAME
-        // ============================================================
 
         listen(room) {
 
@@ -1437,6 +999,11 @@ console.log(
         // ============================================================
 
         applyPublicState(state) {
+            if(this.syncing)return;
+            TR.G.networkRevision=state.revision||0;
+            TR.G.openingAttempt=!!state.openingAttempt;
+            TR.G.firstDiscardPending=!!state.firstDiscardPending;
+            TR.G.jokerSwapActive=!!state.jokerSwapActive;
 
             if (!TR) {
                 return;
@@ -1611,14 +1178,6 @@ console.log(
 // Using null placeholders causes the existing Ramino draw
 // function to fail when it tries to read card.id.
 // ========================================================
-console.log(
-    '🔥 MULTIPLAYER DECK RECEIVED:',
-    state.deck,
-    'COUNT:',
-    state.deck?.length,
-    'STORED COUNT:',
-    state.deckCount
-);
 TR.G.deck =
     this.cardsFromData(
         state.deck || []
@@ -1635,7 +1194,13 @@ TR.G.deck =
 
 
             TR.G.jokerSwapActive =
-                false;
+                !!state.jokerSwapActive;
+
+            if(TR.G.winner!==null){
+                this.setStatus(`🏆 Player ${TR.G.winner+1} wins!`);
+            }else if(TR.G.eliminated.includes(this.playerIndex)){
+                this.setStatus('❌ You have been eliminated from this round.');
+            }
 
 
             // ========================================================
@@ -1674,12 +1239,124 @@ TR.G.deck =
             }
         },
 
+// ============================================================
+// LOCAL HAND ORDER
+// Rearranging cards never uses the network.
+// Only the preferred card order is stored locally.
+// ============================================================
 
+saveLocalHandOrder() {
+
+    if (!this.roomId || !this.playerId) {
+        return;
+    }
+
+    if (
+        this.playerIndex === null ||
+        this.playerIndex === undefined ||
+        this.playerIndex < 0
+    ) {
+        return;
+    }
+
+    const player =
+        TR.G.players[this.playerIndex];
+
+    if (!player || !Array.isArray(player.hand)) {
+        return;
+    }
+
+    const order =
+        player.hand.map(card => String(card.id));
+
+    try {
+
+        localStorage.setItem(
+            `ramino_hand_order_${this.roomId}_${this.playerId}`,
+            JSON.stringify(order)
+        );
+
+    } catch (error) {
+
+        console.warn(
+            'Could not save local hand order:',
+            error
+        );
+    }
+},
+
+
+applyLocalHandOrder(hand) {
+
+    if (!this.roomId || !this.playerId) {
+        return hand;
+    }
+
+    let savedOrder = null;
+
+    try {
+
+        const raw =
+            localStorage.getItem(
+                `ramino_hand_order_${this.roomId}_${this.playerId}`
+            );
+
+        if (raw) {
+            savedOrder = JSON.parse(raw);
+        }
+
+    } catch (error) {
+
+        console.warn(
+            'Could not read local hand order:',
+            error
+        );
+    }
+
+    if (
+        !Array.isArray(savedOrder) ||
+        !savedOrder.length
+    ) {
+        return hand;
+    }
+
+    const byId =
+        new Map(
+            hand.map(card => [
+                String(card.id),
+                card
+            ])
+        );
+
+    const ordered = [];
+
+    // First restore the player's previous arrangement.
+    for (const id of savedOrder) {
+
+        const card =
+            byId.get(String(id));
+
+        if (card) {
+
+            ordered.push(card);
+
+            byId.delete(String(id));
+        }
+    }
+
+    // Any new cards are appended automatically.
+    for (const card of byId.values()) {
+        ordered.push(card);
+    }
+
+    return ordered;
+},
         // ============================================================
         // APPLY PRIVATE HAND
         // ============================================================
 
         applyPrivateHand(hand) {
+            if(this.syncing)return;
 
             if (
                 this.playerIndex === null ||
@@ -1699,13 +1376,15 @@ TR.G.deck =
             }
 
 
-            TR.G.players[
-                this.playerIndex
-            ].hand =
+            const incomingHand =
+    this.cardsFromData(hand);
 
-                this.cardsFromData(
-                    hand
-                );
+TR.G.players[
+    this.playerIndex
+].hand =
+    this.applyLocalHandOrder(
+        incomingHand
+    );
 
 
             if (
@@ -1719,33 +1398,26 @@ TR.G.deck =
 
 
         // ============================================================
-        // STATUS
-        // ============================================================
+// STATUS
+// ============================================================
 
-        setStatus(message) {
+setStatus(message) {
 
-            const el =
-                document.getElementById(
-                    'mp-status'
-                );
+    const el =
+        document.getElementById(
+            'mp-status'
+        );
 
+    if (el) {
+        el.textContent = message;
+    }
 
-            if (el) {
-
-                el.textContent =
-                    message;
-            }
-
-
-            if (
-                window.TigrayRamino?.setMessage
-            ) {
-
-                TR.setMessage(
-                    message
-                );
-            }
-        },
+    if (
+        window.TigrayRamino?.setMessage
+    ) {
+        TR.setMessage(message);
+    }
+},
 
 
         // ============================================================
@@ -1753,6 +1425,8 @@ TR.G.deck =
         // ============================================================
 
         stop() {
+            for(const [name,original] of Object.entries(this.originalActions||{}))TR[name]=original;
+            this.originalActions={};
 
             if (
                 this.unsubscribeGame

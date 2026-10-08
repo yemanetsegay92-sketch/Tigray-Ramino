@@ -21,6 +21,7 @@ TR.renderAll=function(){
     if(opened){
         if(pts>=41)statusText+=` (${pts} pts)`;
         else if(combos>=3)statusText+=` (${combos} combos)`;
+        else if(TR.openingStatus(TR.G.currentPlayer).images)statusText+=' (four images)';
     }else{
         statusText+=` (${pts} pts, ${combos} combos)`;
     }

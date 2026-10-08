@@ -15,6 +15,8 @@ TR.G = {
     selected: [],
     winner: null,
     mustOpen: false,
+    openingAttempt: false,
+    firstDiscardPending: false,
     lastDiscardJoker: false,
     monteMode: false,
     montePlayer: null,

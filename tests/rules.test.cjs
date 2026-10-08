@@ -1,0 +1,149 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const fs=require('node:fs');
+const path=require('node:path');
+function engine(){
+ const context=vm.createContext({window:{},console,localStorage:{getItem:()=>null,setItem:()=>{}},setTimeout,setInterval,clearInterval,document:{getElementById:()=>null}});
+ for(const file of ['config','state','cards','validation','joker','monte','game','multiplayer-game'])
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../js',file+'.js'),'utf8'),context);
+ const T=context.window.TigrayRamino;
+ T.setMessage=m=>T.message=m;T.renderAll=()=>{};T.showModal=()=>{};
+ T.initGame(3);T.G.firstDiscardPending=false;T.G.phase='discard';
+ for(const p of T.G.players){p.hand=[];p.combos=[];p.opened=false;}
+ let id=0; const card=(rank,suit='♠')=>({rank:String(rank),suit,id:String(++id)});
+ const seq=(ranks,suit='♠')=>ranks.map(r=>card(r,suit));
+ const group=(rank,n=3)=>['♥','♠','♦','♣'].slice(0,n).map(s=>card(rank,s));
+ const prepare=combos=>{const last=card('9','♣');T.G.players[0].hand=[...combos.flat(),last];return last;};
+ return {T,context,card,seq,group,prepare};
+}
+test('deal: 14 for starter, 13 for others; first action is discard',()=>{
+ const {T}=engine();T.initGame(4);assert.deepEqual(Array.from(T.G.players,p=>p.hand.length),[14,13,13,13]);
+ const first=T.G.players[0].hand[0];T.doDraw();assert.equal(T.G.players[0].hand.length,14);
+ T.doMonteWin();assert.equal(T.G.monteMode,false);T.doOpenCombo(T.G.players[0].hand.slice(0,3));assert.equal(T.G.players[0].combos.length,0);
+ T.doDiscardCard(first);assert.equal(T.G.phase,'draw');assert.equal(T.G.currentPlayer,1);assert.equal(T.G.firstDiscardPending,false);
+});
+test('41 opening can span two combinations in the same turn',()=>{
+ const {T,group,prepare}=engine();const combos=[group(7),group(8)];const last=prepare(combos);
+ T.doOpenCombo(combos[0]);assert.equal(T.isOpened(0),false);T.doOpenCombo(combos[1]);assert.equal(T.isOpened(0),true);
+ T.doDiscardCard(last);assert.equal(T.G.winner,0);
+});
+test('three combinations below 41 open',()=>{
+ const {T,group,prepare}=engine();const combos=[group(2),group(3),group(4)];prepare(combos);
+ combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.totalPoints(0),27);assert.equal(T.isOpened(0),true);
+});
+test('four-image groups and J-Q-K-A sequence open',()=>{
+ for(const rank of ['J','Q','K','A']){const {T,group,prepare}=engine();const combo=group(rank,4);prepare([combo]);T.doOpenCombo(combo);assert.equal(T.isOpened(0),true);}
+ const {T,seq,prepare}=engine();const combo=seq(['J','Q','K','A']);prepare([combo]);T.doOpenCombo(combo);assert.equal(T.isOpened(0),true);
+});
+test('four low cards or mixed-suit images are not an image opening',()=>{
+ const {T,group,prepare,card}=engine();const combo=group(5,4);const last=prepare([combo]);T.doOpenCombo(combo);assert.equal(T.isOpened(0),false);T.doDiscardCard(last);assert.ok(T.G.eliminated.includes(0));
+ assert.equal(T.validateSeq([card('J','♥'),card('Q'),card('K'),card('A')]).valid,false);
+});
+test('incomplete opening eliminates at discard, cannot accumulate across turns',()=>{
+ const {T,group,prepare}=engine();const combo=group(2);const last=prepare([combo]);T.doOpenCombo(combo);T.doDiscardCard(last);
+ assert.ok(T.G.eliminated.includes(0));assert.equal(T.G.players[0].combos.length,0);assert.equal(T.G.currentPlayer,1);
+});
+test('normal closed turn without opening remains legal',()=>{
+ const {T,card}=engine();T.G.players[0].hand=[card(5),card(6)];T.doDiscardCard(T.G.players[0].hand[0]);assert.equal(T.G.eliminated.length,0);assert.equal(T.G.currentPlayer,1);
+});
+test('playing combinations/additions before draw is blocked',()=>{
+ const {T,group,prepare}=engine();const combo=group(8);prepare([combo]);T.G.phase='draw';T.doOpenCombo(combo);assert.equal(T.G.players[0].combos.length,0);
+});
+test('taking discard can be followed by Monte declaration and win',()=>{
+ const {T,seq,card}=engine();const pairs=[2,3,4,5,6].map(r=>[card(r),card(r)]);const trio=seq([7,8,9],'♥');
+ T.G.players[0].hand=[...pairs.flat(),...trio];T.G.discardPile=[card('K','♣')];T.G.phase='draw';T.doTakeDiscard();assert.equal(T.G.mustOpen,true);
+ T.doMonteWin();assert.equal(T.G.mustOpen,false);pairs.forEach(p=>T.doOpenCombo(p));T.doOpenCombo(trio);
+ assert.equal(T.G.winner,null);T.doDiscardCard(T.G.players[0].hand[0]);assert.equal(T.G.winner,0);
+});
+test('Monte accepts a Joker pair and a valid group trio',()=>{
+ const {T,card,group,prepare}=engine();const pairs=[2,3,4,5].map(r=>[card(r),card(r)]);pairs.push([card(6),card('Joker','Joker')]);const trio=group(8);const last=prepare([...pairs,trio]);
+ T.doMonteWin();[...pairs,trio].forEach(c=>T.doOpenCombo(c));T.doDiscardCard(last);assert.equal(T.G.winner,0);
+});
+test('failed Monte with cards remaining eliminates that turn and clears mode',()=>{
+ const {T,card}=engine();T.G.players[0].hand=[card(3),card(4)];T.doMonteWin();T.doDiscardCard(T.G.players[0].hand[0]);
+ assert.ok(T.G.eliminated.includes(0));assert.equal(T.G.monteMode,false);assert.equal(T.G.currentPlayer,1);
+});
+test('invalid finished Monte is eliminated',()=>{
+ const {T,group,prepare}=engine();const combos=[group(2),group(3),group(4)];const last=prepare(combos);T.doMonteWin();combos.forEach(c=>T.doOpenCombo(c));T.doDiscardCard(last);assert.ok(T.G.eliminated.includes(0));
+});
+test('Monte privileges are restricted to declarer',()=>{
+ const {T,card,prepare}=engine();T.G.monteMode=true;T.G.montePlayer=1;const pair=[card(2),card(2)];prepare([pair]);T.doOpenCombo(pair);assert.equal(T.G.players[0].combos.length,0);
+});
+test('Joker replacement forbidden in Monte and before drawing',()=>{
+ const {T,seq,card}=engine();const combo=seq([4,5,'Joker']);T.G.players[1].combos=[{type:'sequence',cards:combo,points:15,displayCards:T.computeComboDisplay(combo,'sequence')}];T.G.players[0].hand=[card(6),card(9)];T.G.players[0].opened=true;
+ T.doMonteWin();T.G.selected=[0];T.tryJokerSwap(1,0,2);assert.equal(T.G.jokerSwapActive,false);assert.equal(T.doJokerSwap(),false);assert.equal(T.canSwapJoker(0),null);
+});
+test('normal Joker swap finds the Joker by ID in sorted display',()=>{
+ const {T,card}=engine();const joker=card('Joker','Joker');const combo=[joker,card(4),card(5)];T.G.players[1].combos=[{type:'sequence',cards:combo,points:15,displayCards:T.computeComboDisplay(combo,'sequence')}];T.G.players[0].hand=[card(6),card(9)];T.G.players[0].opened=true;T.G.selected=[0];T.tryJokerSwap(1,0,0);assert.equal(T.G.jokerSwapActive,true);assert.equal(T.G.players[1].combos[0].cards[0].rank,'6');
+});
+test('sequence Joker scores match display, including low-A gap',()=>{
+ const {T,seq}=engine();for(const ranks of [['Q','K','Joker'],['A',3,'Joker'],['K','A','Joker'],[2,4,'Joker']]){
+  const cards=seq(ranks);const result=T.validateSeq(cards);const display=T.computeComboDisplay(cards,'sequence');assert.equal(result.valid,true);assert.equal(display.length,cards.length);assert.equal(result.points,display.reduce((s,d)=>s+T.scoreVal(d.displayRank),0));
+ }
+ assert.equal(T.validateSeq(seq(['Q','K','Joker'])).points,30);
+ assert.deepEqual(Array.from(T.computeComboDisplay(seq(['A',3,'Joker']),'sequence'),d=>d.displayRank),['A','2','3']);
+ assert.equal(T.validateSeq(seq(['K','A',2])).valid,false);
+});
+test('cannot use last card on table instead of final discard',()=>{
+ const {T,group}=engine();const combo=group('A',4);T.G.players[0].hand=combo;T.doOpenCombo(combo);assert.ok(T.G.eliminated.includes(0));assert.notEqual(T.G.winner,0);
+});
+test('ordinary finish requires discard and final Joker remains double',()=>{
+ const {T,group,card}=engine();const combo=group('A',4);const joker=card('Joker','Joker');T.G.players[0].hand=[...combo,joker];T.doOpenCombo(combo);assert.equal(T.G.winner,null);T.doDiscardCard(joker);assert.equal(T.G.winner,0);assert.equal(T.G.lastDiscardJoker,true);
+});
+test('duplicate physical card cannot be opened twice',()=>{
+ const {T,card}=engine();const c=card(5);T.G.players[0].hand=[c,card(8)];T.G.monteMode=true;T.G.montePlayer=0;T.doOpenCombo([c,c]);assert.equal(T.G.players[0].combos.length,0);
+});
+async function online(){
+ const e=engine();const {T,context}=e;const MP=context.window.TigrayRaminoMultiplayerGame;
+ MP.roomId='test';MP.playerId='p0';MP.playerIndex=0;T.G.multiplayer=true;T.G.networkRevision=0;
+ context.window.TigrayRaminoMultiplayer={player:{id:'p0'}};
+ const store={state:{status:'playing',playerIds:['p0','p1','p2'],currentPlayer:0,phase:'discard',winner:null,revision:0,players:T.G.players.map(p=>MP.playerPublicData(p)),deck:T.G.deck,discardPile:[]},p0:{hand:[]}};
+ const snap=v=>({exists:()=>!!v,data:()=>JSON.parse(JSON.stringify(v))});
+ let fail=false;
+ context.window.RaminoFirebase={db:{},doc:(_db,...parts)=>parts.at(-1),serverTimestamp:()=>1,getDoc:async r=>snap(store[r]),runTransaction:async(_db,fn)=>{
+  const writes=[];await fn({get:async r=>snap(store[r]),update:(r,v)=>writes.push([r,{...store[r],...v}]),set:(r,v)=>writes.push([r,v])});
+  if(fail)throw Error('test network failure');for(const [r,v] of writes)store[r]=JSON.parse(JSON.stringify(v));
+ }};
+ MP.patchActions();return {...e,MP,store,setFail:v=>fail=v};
+}
+test('online persists image opening, hand and cross-player additions together',async()=>{
+ const {T,MP,store,group,card}=await online();const opening=group('J',4);const addition=card(6,'♥');T.G.players[0].hand=[...opening,addition,card(9)];
+ const target=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:target,points:12,displayCards:T.computeComboDisplay(target,'sequence')}];store.state.players[1]=MP.playerPublicData(T.G.players[1]);
+ await T.doOpenCombo(opening);assert.equal(store.state.players[0].opened,true);assert.equal(store.p0.hand.length,2);
+ await T.doAddToCombo(addition,1,0);assert.equal(store.state.players[1].combos[0].cards.length,4);assert.equal(store.p0.hand.length,1);
+});
+test('online partial opening survives synchronization, then eliminates on discard',async()=>{
+ const {T,store,group,prepare}=await online();const combo=group(2);const last=prepare([combo]);await T.doOpenCombo(combo);assert.equal(T.G.openingAttempt,true);assert.equal(store.state.openingAttempt,true);
+ await T.doDiscardCard(last);assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.players[0].combos.length,0);
+});
+test('online failed Monte eliminates even with hand cards left',async()=>{
+ const {T,store,card}=await online();T.G.players[0].hand=[card(3),card(4)];await T.doMonteWin();assert.equal(store.state.monteMode,true);
+ await T.doDiscardCard(T.G.players[0].hand[0]);assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.monteMode,false);assert.equal(store.p0.hand.length,1);
+});
+test('transaction failure leaves public state and private hand unchanged',async()=>{
+ const {T,store,group,prepare,setFail}=await online();const combo=group('J',4);prepare([combo]);store.p0.hand=JSON.parse(JSON.stringify(T.G.players[0].hand));const prior=JSON.stringify(store);setFail(true);await T.doOpenCombo(combo);
+ assert.equal(JSON.stringify(store),prior);assert.equal(T.G.players[0].hand.length,5);assert.equal(T.G.players[0].combos.length,0);
+});
+test('out-of-turn online player cannot declare Monte',async()=>{
+ const {T,MP,store}=await online();MP.playerIndex=1;await T.doMonteWin();assert.equal(store.state.revision,0);assert.equal(T.G.monteMode,false);
+});
+test('stale revision is rejected without overwriting newer game',async()=>{
+ const {T,store,group,prepare}=await online();const combo=group('J',4);prepare([combo]);store.p0.hand=JSON.parse(JSON.stringify(T.G.players[0].hand));store.state.revision=2;await T.doOpenCombo(combo);assert.equal(store.state.revision,2);assert.equal(store.state.players[0].opened,false);
+});
+test('four-image sequence can use a Joker for Ace',()=>{
+ const {T,seq,prepare}=engine();const combo=seq(['J','Q','K','Joker']);prepare([combo]);T.doOpenCombo(combo);assert.equal(T.isOpened(0),true);
+ assert.deepEqual(Array.from(T.G.players[0].combos[0].displayCards,d=>d.displayRank),['J','Q','K','A']);
+});
+test('online complete Monte wins and publishes zero-card private hand',async()=>{
+ const {T,store,seq,card,prepare}=await online();const pairs=[2,3,4,5,6].map(r=>[card(r),card(r)]);const trio=seq([7,8,9],'♥');const last=prepare([...pairs,trio]);
+ await T.doMonteWin();for(const c of [...pairs,trio])await T.doOpenCombo(c);await T.doDiscardCard(last);
+ assert.equal(store.state.winner,0);assert.equal(store.p0.hand.length,0);assert.equal(store.state.monteMode,false);
+});
+test('all opening methods give discard-taking and add-on rights',()=>{
+ for(const mode of ['points','three','images']){
+ const {T,group,card,prepare}=engine();const combos=mode==='points'?[group(7),group(8)]:mode==='three'?[group(2),group(3),group(4)]:[group('Q',4)];prepare(combos);combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.isOpened(0),true);
+ T.G.phase='draw';const addition=card(6,'♥');T.G.discardPile=[addition];T.doTakeDiscard();assert.equal(T.G.mustOpen,false);
+ const target=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{cards:target,type:'sequence',points:12}];T.doAddToCombo(addition,1,0);assert.equal(T.G.players[1].combos[0].cards.length,4);
+ }
+});
