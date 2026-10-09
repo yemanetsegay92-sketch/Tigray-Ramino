@@ -88,6 +88,10 @@
                 <p><strong>Combinations:</strong> Sequences use the same suit, at least three consecutive cards,
                 with Ace low or high and no K–A–2 wrap. Groups use three or four equal ranks,
                 different suits, with alternating red/black colors. At most one Joker per combination.</p>
+                <p><strong>Ace points:</strong> Ace scores 1 in A–2–3 and other low-Ace sequences,
+                and 11 in high-Ace sequences or groups. Three Aces score 33.</p>
+                <p><strong>Win value:</strong> Normal win is single. Monte or a final Joker discard is double.
+                Combining them stays double; no quadruple win.</p>
                 <p><strong>Jokers:</strong> Only normally opened players can replace a table Joker
                 with its exact card. After replacing one, win that turn with a final discard or be eliminated.</p>
                 <p><strong>Monte Win:</strong> Tap to commit to winning this turn with five identical pairs,
