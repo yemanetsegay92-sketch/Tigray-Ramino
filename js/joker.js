@@ -64,7 +64,8 @@ TR.openingStatus = function (playerIdx) {
 };
 
 TR.isOpened = function (playerIdx) {
-    return !!TR.G.players[playerIdx]?.opened;
+    const montePlayer=TR.G.monteMode && TR.G.montePlayer===playerIdx;
+    return !montePlayer && !!TR.G.players[playerIdx]?.opened;
 };
 
 TR.totalPoints = function (pidx) {
@@ -120,6 +121,8 @@ TR.doJokerSwap = function () {
     const handIdx=p.hand.findIndex(c=>c.id===real.id);
     if(handIdx===-1) return false;
 
+    combo.contributors={...combo.contributors,[real.id]:idx};
+    delete combo.contributors[joker.id];
     combo.cards[info.cardIdx]=real;
     p.hand.splice(handIdx,1);
     p.hand.push(joker);
@@ -154,7 +157,7 @@ TR.tryJokerSwap = function(targetPlayerIdx,targetComboIdx,jokerCardIdx){
     }
 
     if(!TR.isOpened(TR.G.currentPlayer)){
-        TR.setMessage('❌ You must be open to swap a Joker.');
+        TR.setMessage('❌ Open with 41 points, 3 combinations, or four images before replacing a Joker.');
         TR.renderAll(); return;
     }
 
@@ -178,6 +181,8 @@ TR.tryJokerSwap = function(targetPlayerIdx,targetComboIdx,jokerCardIdx){
         TR.renderAll(); return;
     }
 
+    combo.contributors={...combo.contributors,[real.id]:TR.G.currentPlayer};
+    delete combo.contributors[joker.id];
     combo.cards[jokerCardIdx]=real;
     p.hand.splice(selectedHandIdx,1);
     p.hand.push(joker);

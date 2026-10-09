@@ -71,6 +71,40 @@
         }
 
 
+        const howToPlay=document.getElementById('btn-how-to-play');
+        if(howToPlay)howToPlay.addEventListener('click',()=>{
+            TR.modalActive=true;
+            const overlay=document.createElement('div');
+            overlay.className='modal-overlay';
+            overlay.innerHTML=`<div class="modal-box" style="max-height:82vh;overflow:auto;text-align:left">
+                <h2>🃏 How to Play</h2>
+                <p><strong>Turns:</strong> The first player gets 14 cards and discards first.
+                Other players get 13. Draw or take the last discard, play cards, then discard.
+                A winning turn must also end with a discard.</p>
+                <p><strong>Opening:</strong> In one turn, open 41+ points across valid combinations,
+                three valid combinations of any total, or a valid four-image combination:
+                same-suit J–Q–K–A or a four-card group of J, Q, K, or A.
+                All three give the same rights. An unfinished opening attempt eliminates you.</p>
+                <p><strong>Combinations:</strong> Sequences use the same suit, at least three consecutive cards,
+                with Ace low or high and no K–A–2 wrap. Groups use three or four equal ranks,
+                different suits, with alternating red/black colors. At most one Joker per combination.</p>
+                <p><strong>Jokers:</strong> Only normally opened players can replace a table Joker
+                with its exact card. After replacing one, win that turn with a final discard or be eliminated.</p>
+                <p><strong>Monte Win:</strong> Tap to commit to winning this turn with five identical pairs,
+                one valid three-card combination, and a final discard. A Joker can pair with an ordinary card.
+                You may tap after taking the discard. Monte does not grant normal opening rights,
+                and you cannot replace a table Joker. Failure eliminates you.</p>
+                <p><strong>Elimination:</strong> Your openings and all cards you added to other players’ combinations
+                are removed. A combination that becomes invalid is also cleared.</p>
+                <p><strong>Declare Monte:</strong> This is the separate request to restart with everyone’s agreement.</p>
+                <button class="btn-big" id="rules-close">Close</button>
+            </div>`;
+            document.body.appendChild(overlay);
+            overlay.querySelector('#rules-close').addEventListener('click',()=>{
+                overlay.remove();TR.modalActive=false;
+            });
+        });
+
         // ------------------------------------------------------------
         // TRAINING / LOCAL
         // ------------------------------------------------------------
