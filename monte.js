@@ -132,6 +132,9 @@ TR.doMonteWin=function(){
     }
 
     const playerIdx=TR.G.currentPlayer;
+    if(TR.G.players[playerIdx]?.opened){
+        TR.setMessage('⚠️ Monte Win is unavailable after normal opening.'); return;
+    }
 
     // Monte Win belongs to the player who activated it. It must never
     // silently transfer to another player's turn.

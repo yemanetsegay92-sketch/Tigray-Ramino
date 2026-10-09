@@ -14,17 +14,19 @@ Any of these conditions grants the same permanent open status and rights to take
 2. Three valid combinations, even below 41 points.
 3. One valid four-image combination: same-suit J-Q-K-A, or a four-card group of Jacks, Queens, Kings, or Aces obeying the group rules. A Joker may substitute for a card under the normal combination rules.
 
+New sequences must contain 3–5 cards. Longer runs must be split into separate valid combinations: six cards into 3+3, nine into 4+5 or 3+3+3. Players choose their partition; three separately laid valid combinations count toward the three-combination opening. Additions may extend an existing sequence beyond five cards.
+
 Pairs do not count toward normal opening. Existing sequence/group validation still applies, including alternating group colors and at most one Joker per combination.
 
 The existing take-while-closed behavior is retained: taking the top discard commits the player to opening in that turn. Failing to open eliminates them at discard. They may instead activate Monte Win after taking it, which commits them to the Monte finish below.
 
 ## Monte Win
 
-Only tapping **Monte Win** activates a Monte attempt, and it belongs to the player whose turn it is. The player must win that turn or be eliminated at discard.
+Monte Win is disabled for a player after normal opening. Only tapping **Monte Win** activates a Monte attempt, and it belongs to the player whose turn it is. The player must win that turn or be eliminated at discard.
 
 A valid finish has exactly five two-card identical pairs plus one valid three-card sequence or group, totaling 13 table cards, and an empty hand after the final discard. One ordinary card paired with a Joker is a valid pair. Two Jokers are not a valid pair.
 
-Monte does not grant normal opening rights, even if a player was open before activating it. Replacing a table Joker is forbidden during Monte. A player who already replaced a Joker that turn cannot switch to Monte. The system checks the finish automatically after discarding; no second confirmation is needed.
+Monte does not grant normal opening rights. Replacing a table Joker is forbidden during Monte. A player who already replaced a Joker that turn cannot switch to Monte. The system checks the finish automatically after discarding; no second confirmation is needed.
 
 **Declare Monte** remains the separate restart-request control.
 
@@ -44,9 +46,9 @@ If there are no older discards, the game reports that no reshuffle is possible w
 
 ## Joker replacement and elimination cleanup
 
-Joker replacement requires normal open status earned through one of the three opening methods. The exact represented card must replace the Joker. The player must finish that same turn with a final discard, or be eliminated.
+Joker replacement requires normal open status earned through one of the three opening methods. The game automatically chooses the Joker’s represented card; the exact represented card must replace the Joker. The player must finish that same turn with a final discard, or be eliminated.
 
-Elimination removes all of the player’s opened combinations and their contributions to other players’ combinations, including cards placed through Joker replacement. Valid remaining combinations stay with recalculated points and display. If removal leaves an invalid group or sequence, that entire combination is cleared. Removed table cards go to the discard pile, as in the existing elimination behavior. Surviving players keep their earned open status.
+Elimination removes all of the player’s opened combinations and their contributions to other players’ combinations, including cards placed through Joker replacement. Valid remaining combinations stay with recalculated points and display. If removal leaves an invalid group or sequence, that entire combination is cleared. Removed table cards go beneath the existing discard pile, preserving its top card and the order of existing discards. Surviving players keep their earned open status.
 
 New combinations and additions record the contributing player, and multiplayer saves this information. Existing combinations without contribution history are treated as their owner’s cards; start a fresh match to track every addition accurately.
 

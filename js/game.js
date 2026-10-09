@@ -63,7 +63,7 @@ TR.eliminatePlayer=function(playerIdx, reason){
         }
         player.combos=surviving;
     }
-    if(removed.length)TR.G.discardPile.push(...removed);
+    if(removed.length)TR.G.discardPile.unshift(...removed);
     p.opened=false;
 
     const active=TR.G.players.filter((_,i)=>!TR.G.eliminated.includes(i));
@@ -248,6 +248,10 @@ TR.doOpenCombo=function(cards){
     }
 
     if(!result.valid){TR.setMessage('❌ '+result.reason);return;}
+    if(type==='sequence' && cards.length>5){
+        TR.setMessage('❌ Open sequences of 3–5 cards. Split longer sequences into separate combinations.');
+        return;
+    }
 
     const ids=new Set(cards.map(c=>c.id));
     p.hand=p.hand.filter(c=>!ids.has(c.id));

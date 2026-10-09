@@ -96,12 +96,13 @@
                 Combining them stays double; no quadruple win.</p>
                 <p><strong>Jokers:</strong> Only normally opened players can replace a table Joker
                 with its exact card. After replacing one, win that turn with a final discard or be eliminated.</p>
-                <p><strong>Monte Win:</strong> Tap to commit to winning this turn with five identical pairs,
+                <p><strong>Sequences:</strong> Open 3–5 cards at once. Split longer runs into separate valid combinations; additions may extend existing sequences.</p>
+                <p><strong>Monte Win:</strong> Available only before normal opening. Tap to commit to winning this turn with five identical pairs,
                 one valid three-card combination, and a final discard. A Joker can pair with an ordinary card.
                 You may tap after taking the discard. Monte does not grant normal opening rights,
                 and you cannot replace a table Joker. Failure eliminates you.</p>
                 <p><strong>Elimination:</strong> Your openings and all cards you added to other players’ combinations
-                are removed. A combination that becomes invalid is also cleared.</p>
+                are removed and placed beneath the existing discard pile. A combination that becomes invalid is also cleared.</p>
                 <p><strong>Declare Monte:</strong> This is the separate request to restart with everyone’s agreement.</p>
                 <button class="btn-big" id="rules-close">Close</button>
             </div>`;

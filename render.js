@@ -61,6 +61,7 @@ TR.renderAll=function(){
         // to that player. Other players cannot accidentally activate or
         // inherit the Monte attempt on their turns.
         TR.dom.btnMonteWin.disabled =
+            p.opened ||
             TR.G.winner!==null ||
             !!TR.G.monteRequest ||
             (TR.G.monteMode && TR.G.montePlayer!==TR.G.currentPlayer);
