@@ -167,17 +167,28 @@ TR.initGame=function(num){
 TR.doDraw=function(){
     if(TR.G.winner!==null) return;
     if(TR.G.phase!=='draw'){TR.setMessage('⚠️ You must discard first');return;}
-    if(!TR.G.deck.length){TR.setMessage('⚠️ Deck empty!');return;}
 
     const p=TR.currentPlayer();
     if(!p)return;
     if(p.hand.length>=14){TR.setMessage('⚠️ Hand full (14). Discard first.');return;}
 
+    let recycled=false;
+    if(!TR.G.deck.length){
+        if(TR.G.discardPile.length<2){
+            TR.setMessage('⚠️ No older discards to reshuffle. Take the top discard if available.');
+            return;
+        }
+        const top=TR.G.discardPile[TR.G.discardPile.length-1];
+        TR.G.deck=TR.shuffle(TR.G.discardPile.slice(0,-1));
+        TR.G.discardPile=[top];
+        recycled=true;
+    }
+
     p.hand.push(TR.G.deck.pop());
     TR.G.phase='discard';
     TR.G.selected=[];
     TR.G.jokerSwapActive=false;
-    TR.setMessage('📥 Drew a card. Discard or place combos.');
+    TR.setMessage(recycled?'♻️ Older discards reshuffled. Drew a card; now play and discard.':'📥 Drew a card. Discard or place combos.');
     TR.renderAll();
 };
 

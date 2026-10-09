@@ -89,7 +89,9 @@
                 with Ace low or high and no K–A–2 wrap. Groups use three or four equal ranks,
                 different suits, with alternating red/black colors. At most one Joker per combination.</p>
                 <p><strong>Ace points:</strong> Ace scores 1 in A–2–3 and other low-Ace sequences,
-                and 11 in high-Ace sequences or groups. Three Aces score 33.</p>
+                10 in high-Ace sequences, and 11 in groups. Three Aces score 33.</p>
+                <p><strong>Empty draw pile:</strong> Keep the top discard visible and reshuffle
+                older discards into a new draw pile. The same turn then continues.</p>
                 <p><strong>Win value:</strong> Normal win is single. Monte or a final Joker discard is double.
                 Combining them stays double; no quadruple win.</p>
                 <p><strong>Jokers:</strong> Only normally opened players can replace a table Joker

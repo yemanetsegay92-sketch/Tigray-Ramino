@@ -79,7 +79,7 @@ test('normal Joker swap finds the Joker by ID in sorted display',()=>{
 });
 test('sequence Joker scores match display, including low-A gap',()=>{
  const {T,seq}=engine();for(const ranks of [['Q','K','Joker'],['A',3,'Joker'],['K','A','Joker'],[2,4,'Joker']]){
-  const cards=seq(ranks);const result=T.validateSeq(cards);const display=T.computeComboDisplay(cards,'sequence');assert.equal(result.valid,true);assert.equal(display.length,cards.length);assert.equal(result.points,display.reduce((s,d)=>s+(d.displayRank==='A'&&!result.aceHigh?1:T.scoreVal(d.displayRank)),0));
+  const cards=seq(ranks);const result=T.validateSeq(cards);const display=T.computeComboDisplay(cards,'sequence');assert.equal(result.valid,true);assert.equal(display.length,cards.length);assert.equal(result.points,display.reduce((s,d)=>s+(d.displayRank==='A'?(result.aceHigh?10:1):T.scoreVal(d.displayRank)),0));
  }
  assert.equal(T.validateSeq(seq(['Q','K','Joker'])).points,30);
  assert.deepEqual(Array.from(T.computeComboDisplay(seq(['A',3,'Joker']),'sequence'),d=>d.displayRank),['A','2','3']);
@@ -204,8 +204,8 @@ test('cleanup restores a valid three-card group after its fourth card is removed
 test('elimination clears its owner table even when others contributed',()=>{
  const {T,card}=engine();const cards=[card(3),card(4),card(5),card(6)];T.G.players[0].combos=[{type:'sequence',cards,contributors:{[cards[3].id]:2}}];T.eliminatePlayer(0,'test');assert.equal(T.G.players[0].combos.length,0);assert.ok(cards.every(c=>T.G.discardPile.some(d=>d.id===c.id)));
 });
-test('Ace scores 1 low, 11 high, and 33 for a three-Ace group',()=>{
- const {T,seq,group}=engine();assert.equal(T.validateSeq(seq(['A',2,3])).points,6);assert.equal(T.validateSeq(seq(['A',2,3,4])).points,10);assert.equal(T.validateSeq(seq(['Q','K','A'])).points,31);assert.equal(T.validateGroup(group('A')).points,33);
+test('Ace scores 1 low, 10 high, and 33 for a three-Ace group',()=>{
+ const {T,seq,group}=engine();assert.equal(T.validateSeq(seq(['A',2,3])).points,6);assert.equal(T.validateSeq(seq(['A',2,3,4])).points,10);assert.equal(T.validateSeq(seq(['Q','K','A'])).points,30);assert.equal(T.validateGroup(group('A')).points,33);
 });
 test('three Aces plus either example combination opens at 42',()=>{
  for(const useGroup of [true,false]){const {T,group,seq,prepare}=engine();const combos=[group('A'),useGroup?group(3):seq([2,3,4])];prepare(combos);combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.totalPoints(0),42);assert.equal(T.isOpened(0),true);}
@@ -215,4 +215,26 @@ test('low-Ace points cannot incorrectly push two combinations above 41',()=>{
 });
 test('Monte with a final Joker is double, never quadruple',()=>{
  const {T,seq,card}=engine();const pairs=[2,3,4,5,6].map(r=>[card(r),card(r)]);const trio=seq([7,8,9],'♥');const last=card('Joker');T.G.players[0].hand=[...pairs.flat(),...trio,last];T.doMonteWin();[...pairs,trio].forEach(c=>T.doOpenCombo(c));T.doDiscardCard(last);assert.equal(T.G.winner,0);assert.match(T.message,/DOUBLE MONTE/);assert.doesNotMatch(T.message,/QUADRUPLE/);
+});
+test('A-2-3-4 plus Q-K-A stays closed at 40; J-Q-K-A opens by images',()=>{
+ const {T,seq,prepare}=engine();const combos=[seq(['A',2,3,4]),seq(['Q','K','A'],'♥')];prepare(combos);combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.totalPoints(0),40);assert.equal(T.isOpened(0),false);
+ const e=engine();const images=e.seq(['J','Q','K','A']);e.prepare([images]);e.T.doOpenCombo(images);assert.equal(e.T.totalPoints(0),40);assert.equal(e.T.isOpened(0),true);assert.equal(e.T.openingStatus(0).images,true);
+});
+test('empty-deck draw preserves top discard and every physical card',()=>{
+ const {T,card}=engine();const older=[card(2),card(3),card(4)];const top=card(5);const held=card(8);T.G.deck=[];T.G.discardPile=[...older,top];T.G.players[0].hand=[held];T.G.phase='draw';T.doDraw();
+ assert.equal(T.G.discardPile.length,1);assert.equal(T.G.discardPile[0].id,top.id);assert.equal(T.G.deck.length,2);assert.equal(T.G.players[0].hand.length,2);assert.equal(T.G.phase,'discard');assert.equal(T.G.currentPlayer,0);
+ const all=[...T.G.deck,...T.G.discardPile,...T.G.players[0].hand].map(c=>c.id);assert.equal(new Set(all).size,5);assert.deepEqual(all.sort(),[...older,top,held].map(c=>c.id).sort());
+});
+test('no older discards does not invent cards or lose the top discard',()=>{
+ const {T,card}=engine();const top=card(3);T.G.deck=[];T.G.discardPile=[top];T.G.phase='draw';T.doDraw();assert.equal(T.G.phase,'draw');assert.equal(T.G.deck.length,0);assert.equal(T.G.discardPile[0].id,top.id);T.doTakeDiscard();assert.equal(T.G.players[0].hand[0].id,top.id);
+});
+test('draw does not recycle when wrong phase or hand already full',()=>{
+ const {T,card}=engine();T.G.deck=[];T.G.discardPile=[card(2),card(3)];const ids=T.G.discardPile.map(c=>c.id);T.doDraw();assert.deepEqual(Array.from(T.G.discardPile,c=>c.id),ids);T.G.phase='draw';T.G.players[0].hand=Array.from({length:14},()=>card(5));T.doDraw();assert.equal(T.G.discardPile.length,2);assert.equal(T.G.deck.length,0);
+});
+test('online reshuffle and draw are synchronized in one action',async()=>{
+ const {T,store,card}=await online();const older=[card(2),card(3)];const top=card(4);T.G.deck=[];T.G.discardPile=[...older,top];T.G.phase='draw';store.state.phase='draw';store.state.deck=[];store.state.discardPile=JSON.parse(JSON.stringify(T.G.discardPile));
+ await T.doDraw();assert.equal(store.state.revision,1);assert.equal(store.state.phase,'discard');assert.equal(store.state.deck.length,1);assert.equal(store.state.discardPile.length,1);assert.equal(store.state.discardPile[0].id,top.id);assert.equal(store.p0.hand.length,1);
+});
+test('failed online reshuffle leaves original discard pile untouched',async()=>{
+ const {T,store,card,setFail}=await online();T.G.deck=[];T.G.discardPile=[card(2),card(3),card(4)];T.G.phase='draw';store.state.phase='draw';store.state.deck=[];store.state.discardPile=JSON.parse(JSON.stringify(T.G.discardPile));const prior=JSON.stringify(store);setFail(true);await T.doDraw();assert.equal(JSON.stringify(store),prior);assert.equal(T.G.discardPile.length,3);assert.equal(T.G.phase,'draw');
 });
