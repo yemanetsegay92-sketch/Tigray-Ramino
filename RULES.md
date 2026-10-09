@@ -30,9 +30,17 @@ Monte does not grant normal opening rights, even if a player was open before act
 
 ## Ace points and win value
 
-Ace scores 1 in a low-Ace sequence such as A–2–3, and 11 in a high-Ace sequence or a same-rank group. Three Aces score 33. Together with a valid 3–3–3 group (9 points), or a same-suit 2–3–4 sequence (9 points), they make 42 and satisfy the 41-point opening.
+Ace scores 1 in a low-Ace sequence such as A–2–3, 10 in a high-Ace sequence, and 11 in a same-rank group. Three Aces score 33. Together with a valid 3–3–3 group (9 points), or a same-suit 2–3–4 sequence (9 points), they make 42 and satisfy the 41-point opening.
 
 A normal finish is single. Monte is double. A final Joker discard makes a normal finish double. Monte with a final Joker discard is still double: the maximum is double, with no quadruple win.
+
+A–2–3–4 plus Q–K–A totals 10 + 30 = 40, so those two combinations cannot open through points. J–Q–K–A also totals 40, but opens through the separate four-image rule.
+
+## Empty draw pile
+
+When drawing from an empty pile, preserve the top discard and shuffle the older discards into a new draw pile. Draw one card immediately and continue the same turn. Hands and opened cards are not recycled. Multiplayer publishes the reshuffle and draw together.
+
+If there are no older discards, the game reports that no reshuffle is possible without changing the turn or inventing cards; the top discard can still be taken if available.
 
 ## Joker replacement and elimination cleanup
 
@@ -52,4 +60,4 @@ The active browser modules are under `js/`; legacy root copies of changed module
 
 Run regression checks with `node --test tests/rules.test.cjs`. Telegram handler checks run with `python -m unittest discover -s tests -p '*_test.py'`. They mock outgoing messages and do not send anything to users. Tests use an in-memory Firestore stand-in; they do not establish the deployed database's permissions or replace a real two-device match.
 
-Empty-deck behavior and multiplayer restart voting remain unchanged.
+Multiplayer restart voting remains unchanged.

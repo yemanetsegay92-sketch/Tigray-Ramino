@@ -73,7 +73,7 @@ TR.validateSeq = function (cards) {
                 break;
             }
         }
-        if (found) pts += found==='A' && !aceHigh ? 1 : TR.scoreVal(found);
+        if (found) pts += found==='A' ? (aceHigh ? 10 : 1) : TR.scoreVal(found);
     }
 
     return {valid:true, points:pts, min:r.min, max:r.max, aceHigh};
