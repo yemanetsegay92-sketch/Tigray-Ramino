@@ -147,3 +147,60 @@ test('all opening methods give discard-taking and add-on rights',()=>{
  const target=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{cards:target,type:'sequence',points:12}];T.doAddToCombo(addition,1,0);assert.equal(T.G.players[1].combos[0].cards.length,4);
  }
 });
+test('Monte has no normal opening rights even for a previously opened player',()=>{
+ const {T,group,prepare}=engine();const combo=group('Q',4);prepare([combo]);T.doOpenCombo(combo);assert.equal(T.isOpened(0),true);
+ T.doMonteWin();assert.equal(T.isOpened(0),false);assert.equal(T.canSwapJoker(0),null);
+});
+test('Joker replacement is rejected for a closed player',()=>{
+ const {T,card}=engine();const joker=card('Joker');const cards=[card(3),card(4),joker];T.G.players[1].combos=[{type:'sequence',cards,displayCards:T.computeComboDisplay(cards,'sequence')}];
+ T.G.players[0].hand=[card(5),card(9)];T.G.selected=[0];T.tryJokerSwap(1,0,2);assert.equal(T.G.jokerSwapActive,false);assert.equal(T.canSwapJoker(0),null);
+});
+function jokerTable(e){
+ const {T,card}=e;const joker=card('Joker');const cards=[card(3),card(4),joker];
+ T.G.players[1].combos=[{type:'sequence',cards,points:12,displayCards:T.computeComboDisplay(cards,'sequence'),contributors:Object.fromEntries(cards.map(c=>[c.id,1]))}];
+ T.G.players[0].opened=true;return {joker,cards};
+}
+test('failed Joker swap removes the replacement from another player table',()=>{
+ const e=engine();const {T,card}=e;const {cards}=jokerTable(e);const replacement=card(5);T.G.players[0].hand=[replacement,card(8),card(9)];T.G.selected=[0];T.tryJokerSwap(1,0,2);
+ T.doDiscardCard(T.G.players[0].hand.find(c=>c.rank==='9'));assert.ok(T.G.eliminated.includes(0));assert.equal(T.G.players[1].combos.length,0);
+ assert.ok(!T.G.players.some(p=>p.combos.some(c=>c.cards.some(x=>x.id===replacement.id))));
+});
+test('Joker swap permits winning only after required final discard',()=>{
+ const e=engine();const {T,card}=e;jokerTable(e);const replacement=card(5);const second=[card(6,'♥'),card(7,'♥')];const last=card(9);
+ T.G.players[0].hand=[replacement,...second,last];T.G.selected=[0];T.tryJokerSwap(1,0,2);const joker=T.G.players[0].hand.find(c=>T.isJoker(c));T.doOpenCombo([...second,joker]);assert.equal(T.G.winner,null);T.doDiscardCard(last);assert.equal(T.G.winner,0);assert.equal(T.G.eliminated.length,0);
+});
+test('elimination removes openings and add-ons while keeping a valid original sequence',()=>{
+ const {T,card,group,prepare}=engine();const own=group('Q',4);prepare([own]);T.doOpenCombo(own);
+ const original=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:original,points:12}];const addon=card(6,'♥');T.G.players[0].hand.push(addon);T.doAddToCombo(addon,1,0);
+ assert.equal(T.G.players[1].combos[0].contributors[addon.id],0);T.eliminatePlayer(0,'test');
+ assert.equal(T.G.players[0].combos.length,0);assert.equal(T.G.players[0].opened,false);
+ const restored=T.G.players[1].combos[0];assert.equal(restored.cards.length,3);assert.equal(restored.points,12);assert.ok(!restored.cards.some(c=>c.id===addon.id));assert.equal(T.G.currentPlayer,1);
+});
+test('eliminated contributions removed without removing other players valid additions',()=>{
+ const {T,card}=engine();const originals=[card(3),card(4),card(5)];const fromZero=card(6);const fromTwo=card(2);
+ const cards=[...originals,fromZero,fromTwo];T.G.players[1].combos=[{type:'sequence',cards,points:20,contributors:{[fromZero.id]:0,[fromTwo.id]:2}}];
+ T.eliminatePlayer(0,'test');const remaining=T.G.players[1].combos[0];assert.equal(remaining.cards.length,4);assert.ok(remaining.cards.some(c=>c.id===fromTwo.id));assert.equal(remaining.contributors[fromTwo.id],2);
+});
+test('invalid remainder after removal cannot stay on table',()=>{
+ const {T,card}=engine();const base=[card(3),card(4),card(5)];const addon=card(6);const further=card(7);
+ T.G.players[1].combos=[{type:'sequence',cards:[...base,addon,further],points:25,contributors:{[addon.id]:0,[further.id]:2}}];
+ T.eliminatePlayer(0,'test');assert.equal(T.G.players[1].combos.length,0);
+});
+test('online add-on provenance survives reload and failed-Monte cleanup',async()=>{
+ const {T,MP,store,card}=await online();T.G.players[0].opened=true;
+ const original=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:original,points:12}];store.state.players[1]=MP.playerPublicData(T.G.players[1]);const addon=card(6,'♥');T.G.players[0].hand=[addon,card(8),card(9)];
+ await T.doAddToCombo(addon,1,0);assert.equal(store.state.players[1].combos[0].contributors[addon.id],0);assert.equal(T.G.players[1].combos[0].contributors[addon.id],0);
+ await T.doMonteWin();await T.doDiscardCard(T.G.players[0].hand[0]);assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.players[1].combos[0].cards.length,3);assert.ok(!store.state.players[1].combos[0].cards.some(c=>c.id===addon.id));
+});
+test('online Joker-swap obligation survives synchronization and eliminates on failure',async()=>{
+ const e=await online();const {T,MP,store,card}=e;jokerTable(e);store.state.players[1]=MP.playerPublicData(T.G.players[1]);const replacement=card(5);T.G.players[0].hand=[replacement,card(8),card(9)];T.G.selected=[0];
+ await T.tryJokerSwap(1,0,2);assert.equal(T.G.jokerSwapActive,true);assert.equal(store.state.jokerSwapActive,true);
+ await T.doDiscardCard(T.G.players[0].hand.find(c=>c.rank==='9'));assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.players[1].combos.length,0);
+});
+test('cleanup restores a valid three-card group after its fourth card is removed',()=>{
+ const {T,group,card}=engine();const original=group(7);const addon=card(7,'♣');T.G.players[1].combos=[{type:'group',cards:original,points:21}];T.G.players[0].opened=true;T.G.players[0].hand=[addon,card(9)];
+ T.doAddToCombo(addon,1,0);assert.equal(T.G.players[1].combos[0].cards.length,4);T.eliminatePlayer(0,'test');assert.equal(T.G.players[1].combos[0].cards.length,3);assert.equal(T.G.players[1].combos[0].points,21);
+});
+test('elimination clears its owner table even when others contributed',()=>{
+ const {T,card}=engine();const cards=[card(3),card(4),card(5),card(6)];T.G.players[0].combos=[{type:'sequence',cards,contributors:{[cards[3].id]:2}}];T.eliminatePlayer(0,'test');assert.equal(T.G.players[0].combos.length,0);assert.ok(cards.every(c=>T.G.discardPile.some(d=>d.id===c.id)));
+});

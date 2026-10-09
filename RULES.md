@@ -24,14 +24,26 @@ Only tapping **Monte Win** activates a Monte attempt, and it belongs to the play
 
 A valid finish has exactly five two-card identical pairs plus one valid three-card sequence or group, totaling 13 table cards, and an empty hand after the final discard. One ordinary card paired with a Joker is a valid pair. Two Jokers are not a valid pair.
 
-Replacing a table Joker is forbidden during Monte. A player who already replaced a Joker that turn cannot switch to Monte. The system checks the finish automatically after discarding; no second confirmation is needed.
+Monte does not grant normal opening rights, even if a player was open before activating it. Replacing a table Joker is forbidden during Monte. A player who already replaced a Joker that turn cannot switch to Monte. The system checks the finish automatically after discarding; no second confirmation is needed.
 
 **Declare Monte** remains the separate restart-request control.
+
+## Joker replacement and elimination cleanup
+
+Joker replacement requires normal open status earned through one of the three opening methods. The exact represented card must replace the Joker. The player must finish that same turn with a final discard, or be eliminated.
+
+Elimination removes all of the player’s opened combinations and their contributions to other players’ combinations, including cards placed through Joker replacement. Valid remaining combinations stay with recalculated points and display. If removal leaves an invalid group or sequence, that entire combination is cleared. Removed table cards go to the discard pile, as in the existing elimination behavior. Surviving players keep their earned open status.
+
+New combinations and additions record the contributing player, and multiplayer saves this information. Existing combinations without contribution history are treated as their owner’s cards; start a fresh match to track every addition accurately.
+
+## Telegram
+
+`/start` opens the current game; `/help` and `/rules` explain the three openings, same-turn Joker/Monte obligation, and elimination cleanup. Private chats use the Mini App button; group chats use a regular game link. Delivery failures return HTTP 503 so Telegram can retry. Health checks return HTTP 503 when the bot token is missing. The in-game How to Play button displays these rules too.
 
 ## Implementation and validation
 
 The active browser modules are under `js/`; legacy root copies of changed modules are kept identical. Online turn actions save shared state and the acting player's hand in one Firestore transaction, with a revision check to reject stale actions. Other players' modified combinations are saved too.
 
-Run regression checks with `node --test tests/rules.test.cjs`. Tests use an in-memory Firestore stand-in; they do not establish the deployed database's permissions or replace a real two-device match.
+Run regression checks with `node --test tests/rules.test.cjs`. Telegram handler checks run with `python -m unittest discover -s tests -p '*_test.py'`. They mock outgoing messages and do not send anything to users. Tests use an in-memory Firestore stand-in; they do not establish the deployed database's permissions or replace a real two-device match.
 
 Ace point values, win multipliers, empty-deck behavior, and multiplayer restart voting are unchanged by this update.

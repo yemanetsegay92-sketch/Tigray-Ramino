@@ -137,6 +137,7 @@
 
             return {
 
+                contributors:{...combo.contributors},
                 cards:
                     this.cardsData(
                         combo.cards
@@ -1125,6 +1126,7 @@ TR.G.multiplayer = true;
                                                 ...x
                                             })),
 
+                                    contributors:{...c.contributors},
                                     type:
                                         c.type ||
                                         'sequence',

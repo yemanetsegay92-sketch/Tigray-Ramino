@@ -33,14 +33,38 @@ TR.eliminatePlayer=function(playerIdx, reason){
         TR.G.monteMode=false; TR.G.montePlayer=null; TR.G.monteWinPending=false;
     }
 
-    // Remove the eliminated player's table cards from play and return
-    // them to the discard pile, just as a failed Monte is handled.
-    const allCards=[];
-    for(const combo of p.combos || []){
-        for(const c of combo.cards || []) allCards.push(c);
+    // Remove their own openings AND their contributions to other players.
+    // A legacy combination without provenance is treated as its owner's cards.
+    const removed=[];
+    for(let owner=0;owner<TR.G.players.length;owner++){
+        const player=TR.G.players[owner];
+        const surviving=[];
+        for(const combo of player.combos||[]){
+            if(owner===playerIdx){removed.push(...combo.cards);continue;}
+            const remaining=combo.cards.filter(card=>{
+                const contributor=combo.contributors?.[card.id] ?? owner;
+                if(contributor===playerIdx){removed.push(card);return false;}
+                return true;
+            });
+            if(remaining.length===combo.cards.length){surviving.push(combo);continue;}
+            const result=combo.type==='sequence'?TR.validateSeq(remaining):
+                combo.type==='group'?TR.validateGroup(remaining):TR.validatePair(remaining);
+            if(!result.valid){
+                // A table combination must never remain with fewer than three
+                // cards or with a gap left by a removed contributor.
+                removed.push(...remaining);continue;
+            }
+            combo.cards=remaining;
+            combo.contributors=Object.fromEntries(remaining.map(card=>
+                [card.id,combo.contributors?.[card.id] ?? owner]));
+            combo.points=result.points;
+            combo.displayCards=TR.computeComboDisplay(remaining,combo.type);
+            surviving.push(combo);
+        }
+        player.combos=surviving;
     }
-    if(allCards.length) TR.G.discardPile=TR.G.discardPile.concat(allCards);
-    p.combos=[];
+    if(removed.length)TR.G.discardPile.push(...removed);
+    p.opened=false;
 
     const active=TR.G.players.filter((_,i)=>!TR.G.eliminated.includes(i));
 
@@ -219,6 +243,7 @@ TR.doOpenCombo=function(cards){
 
     const combo={
         cards:cards.slice(),
+        contributors:Object.fromEntries(cards.map(card=>[card.id,TR.G.currentPlayer])),
         type,
         points:result.points,
         displayCards:TR.computeComboDisplay(cards,type)
@@ -307,6 +332,7 @@ TR.doAddToCombo=function(card,targetPlayerIdx,targetComboIdx){
         }
 
         p.hand.splice(handIdx,1);
+        combo.contributors={...combo.contributors,[card.id]:TR.G.currentPlayer};
         combo.cards=newCards;
         combo.points=result.points;
         combo.displayCards=TR.computeComboDisplay(newCards,'group');
@@ -320,6 +346,7 @@ TR.doAddToCombo=function(card,targetPlayerIdx,targetComboIdx){
         if(!result.valid){TR.setMessage('❌ Cannot add: '+result.reason);return;}
 
         p.hand.splice(handIdx,1);
+        combo.contributors={...combo.contributors,[card.id]:TR.G.currentPlayer};
         combo.cards=newCards;
         combo.points=result.points;
         combo.displayCards=TR.computeComboDisplay(newCards,'sequence');
