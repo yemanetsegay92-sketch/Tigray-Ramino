@@ -399,10 +399,8 @@ TR.doDiscardCard=function(card){
             TR.G.monteWinPending=false;
             TR.G.monteMode=false;
             TR.G.montePlayer=null;
-            const mult=TR.G.lastDiscardJoker?4:2;
-            const msg=mult>=4
-                ?`🏆 Player ${TR.G.currentPlayer+1} wins by QUADRUPLE MONTE! 🃏💰`
-                :`🏆 Player ${TR.G.currentPlayer+1} wins by DOUBLE MONTE! 🃏`;
+            // Monte is double even when the final discard is a Joker.
+            const msg=`🏆 Player ${TR.G.currentPlayer+1} wins by DOUBLE MONTE! 🃏`;
             TR.setMessage(msg);
             TR.renderAll();
             TR.showModal('🎉 MONTE!',msg,false);

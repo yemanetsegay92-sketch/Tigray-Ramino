@@ -79,7 +79,7 @@ test('normal Joker swap finds the Joker by ID in sorted display',()=>{
 });
 test('sequence Joker scores match display, including low-A gap',()=>{
  const {T,seq}=engine();for(const ranks of [['Q','K','Joker'],['A',3,'Joker'],['K','A','Joker'],[2,4,'Joker']]){
-  const cards=seq(ranks);const result=T.validateSeq(cards);const display=T.computeComboDisplay(cards,'sequence');assert.equal(result.valid,true);assert.equal(display.length,cards.length);assert.equal(result.points,display.reduce((s,d)=>s+T.scoreVal(d.displayRank),0));
+  const cards=seq(ranks);const result=T.validateSeq(cards);const display=T.computeComboDisplay(cards,'sequence');assert.equal(result.valid,true);assert.equal(display.length,cards.length);assert.equal(result.points,display.reduce((s,d)=>s+(d.displayRank==='A'&&!result.aceHigh?1:T.scoreVal(d.displayRank)),0));
  }
  assert.equal(T.validateSeq(seq(['Q','K','Joker'])).points,30);
  assert.deepEqual(Array.from(T.computeComboDisplay(seq(['A',3,'Joker']),'sequence'),d=>d.displayRank),['A','2','3']);
@@ -203,4 +203,16 @@ test('cleanup restores a valid three-card group after its fourth card is removed
 });
 test('elimination clears its owner table even when others contributed',()=>{
  const {T,card}=engine();const cards=[card(3),card(4),card(5),card(6)];T.G.players[0].combos=[{type:'sequence',cards,contributors:{[cards[3].id]:2}}];T.eliminatePlayer(0,'test');assert.equal(T.G.players[0].combos.length,0);assert.ok(cards.every(c=>T.G.discardPile.some(d=>d.id===c.id)));
+});
+test('Ace scores 1 low, 11 high, and 33 for a three-Ace group',()=>{
+ const {T,seq,group}=engine();assert.equal(T.validateSeq(seq(['A',2,3])).points,6);assert.equal(T.validateSeq(seq(['A',2,3,4])).points,10);assert.equal(T.validateSeq(seq(['Q','K','A'])).points,31);assert.equal(T.validateGroup(group('A')).points,33);
+});
+test('three Aces plus either example combination opens at 42',()=>{
+ for(const useGroup of [true,false]){const {T,group,seq,prepare}=engine();const combos=[group('A'),useGroup?group(3):seq([2,3,4])];prepare(combos);combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.totalPoints(0),42);assert.equal(T.isOpened(0),true);}
+});
+test('low-Ace points cannot incorrectly push two combinations above 41',()=>{
+ const {T,seq,group,prepare}=engine();const combos=[seq(['A',2,3]),group(10)];prepare(combos);combos.forEach(c=>T.doOpenCombo(c));assert.equal(T.totalPoints(0),36);assert.equal(T.isOpened(0),false);
+});
+test('Monte with a final Joker is double, never quadruple',()=>{
+ const {T,seq,card}=engine();const pairs=[2,3,4,5,6].map(r=>[card(r),card(r)]);const trio=seq([7,8,9],'♥');const last=card('Joker');T.G.players[0].hand=[...pairs.flat(),...trio,last];T.doMonteWin();[...pairs,trio].forEach(c=>T.doOpenCombo(c));T.doDiscardCard(last);assert.equal(T.G.winner,0);assert.match(T.message,/DOUBLE MONTE/);assert.doesNotMatch(T.message,/QUADRUPLE/);
 });

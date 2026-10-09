@@ -28,6 +28,12 @@ Monte does not grant normal opening rights, even if a player was open before act
 
 **Declare Monte** remains the separate restart-request control.
 
+## Ace points and win value
+
+Ace scores 1 in a low-Ace sequence such as A–2–3, and 11 in a high-Ace sequence or a same-rank group. Three Aces score 33. Together with a valid 3–3–3 group (9 points), or a same-suit 2–3–4 sequence (9 points), they make 42 and satisfy the 41-point opening.
+
+A normal finish is single. Monte is double. A final Joker discard makes a normal finish double. Monte with a final Joker discard is still double: the maximum is double, with no quadruple win.
+
 ## Joker replacement and elimination cleanup
 
 Joker replacement requires normal open status earned through one of the three opening methods. The exact represented card must replace the Joker. The player must finish that same turn with a final discard, or be eliminated.
@@ -46,4 +52,4 @@ The active browser modules are under `js/`; legacy root copies of changed module
 
 Run regression checks with `node --test tests/rules.test.cjs`. Telegram handler checks run with `python -m unittest discover -s tests -p '*_test.py'`. They mock outgoing messages and do not send anything to users. Tests use an in-memory Firestore stand-in; they do not establish the deployed database's permissions or replace a real two-device match.
 
-Ace point values, win multipliers, empty-deck behavior, and multiplayer restart voting are unchanged by this update.
+Empty-deck behavior and multiplayer restart voting remain unchanged.
