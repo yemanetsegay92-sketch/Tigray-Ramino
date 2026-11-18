@@ -11,7 +11,8 @@
     "test": "node --test tests/rules.test.cjs tests/backend.test.cjs",
     "test:telegram": "python -m unittest tests/telegram_test.py",
     "test:rules": "firebase emulators:exec --only firestore \"node --test tests/firestore.rules.test.cjs\"",
-    "test:all": "npm test && npm run test:rules",
+    "test:emulators": "firebase emulators:exec --only auth,firestore,functions \"node --test tests/firestore.rules.test.cjs tests/functions.integration.test.cjs\"",
+    "test:all": "npm test && npm run test:telegram && npm run test:emulators",
     "emulators": "firebase emulators:start --only auth,firestore,functions"
   },
   "dependencies": {

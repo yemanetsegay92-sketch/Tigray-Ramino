@@ -29,11 +29,12 @@ const firebaseConfig = {
     authDomain: 'tigray-ramino-2-prod.firebaseapp.com',
     messagingSenderId: '1042823690441'
 };
+const FUNCTIONS_REGION = 'africa-south1';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const functions = getFunctions(app, 'europe-west1');
+const functions = getFunctions(app, FUNCTIONS_REGION);
 
 const useEmulators = ['localhost', '127.0.0.1'].includes(location.hostname) &&
     (new URLSearchParams(location.search).get('emulators') === '1' ||

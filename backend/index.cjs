@@ -15,7 +15,7 @@ const {
 initializeApp();
 
 const db = getFirestore();
-const REGION = process.env.RAMINO_FUNCTION_REGION || 'europe-west1';
+const REGION = 'africa-south1';
 const callableOptions = {
   region: REGION,
   enforceAppCheck: false,

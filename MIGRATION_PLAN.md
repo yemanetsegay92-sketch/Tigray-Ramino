@@ -8,10 +8,16 @@ Tigray Ramino 2.0 uses a new, independent production Firebase project:
 - Display name: `Tigray Ramino 2 Production`
 - Web app ID: `1:1042823690441:web:e6c70ca97fdc79d813f518`
 - Billing: not enabled
-- Firestore: empty Standard database currently exists in `nam5`; this was
-  created by Firebase CLI setup during a rules `--dry-run`. No rules or data
-  were deployed. The owner must decide whether to accept this US multi-region
-  location or replace the empty setup with an Africa-region project/database.
+- Firestore database: `(default)`
+- Firestore region: `africa-south1`
+- Firestore edition: Standard (free tier)
+- Firestore deletion protection: enabled
+- Cloud Functions region: `africa-south1`
+
+The temporary empty `nam5` database has been deleted by the owner. The permanent
+empty `(default)` database was recreated successfully in `africa-south1` on
+November 18, 2026. The regional migration is complete; no application data or
+deployed rules required migration.
 
 The legacy `ramino-41` project is out of scope. It must not be inspected,
 recovered, linked, migrated, or modified. No Tigray Ramino 2.0 configuration
@@ -74,9 +80,9 @@ matching snapshots after reconnecting.
 
 ### Phase 2 — production readiness (before broad release)
 
-- Resolve the permanent Firestore location (`nam5` currently exists;
-  `africa-south1` is recommended for an Ethiopia-focused audience).
-- Enable Anonymous Authentication and provision Firestore in the new project.
+- Permanent Firestore location resolved: `(default)` is provisioned in
+  `africa-south1` with Standard edition and deletion protection enabled.
+- Enable Anonymous Authentication in the new project.
 - Deploy only Auth configuration and reviewed Firestore rules/indexes.
 - Run full Auth, Firestore, and Functions emulator end-to-end tests.
 - Add App Check after the production domain is approved.
@@ -84,6 +90,43 @@ matching snapshots after reconnecting.
 - Complete multiplayer device testing in browsers and Telegram on Android/iOS.
 - Obtain approval for a billing plan before any Functions deployment; callable
   Functions cannot be treated as live until that approval and deployment occur.
+
+## Activation and deployment gates
+
+### Anonymous Authentication
+
+The browser implementation and `firebase.json` provider configuration are
+ready. Anonymous Authentication is not active until the owner approves one of
+these configuration changes:
+
+1. Deploy only the prepared Authentication configuration with
+   `firebase deploy --only auth`, or enable Anonymous in Firebase Console.
+2. Confirm the production and preview domains are listed under Authentication
+   authorized domains.
+3. Verify a fresh browser and Telegram Mini App session both receive a durable
+   anonymous UID, and that refresh/reopen preserves it.
+
+Anonymous Authentication itself does not require Blaze billing. This activation
+must happen before real clients can call the authenticated multiplayer backend.
+
+### Cloud Functions
+
+All callable functions explicitly target `africa-south1`, matching Firestore.
+Deploying second-generation Cloud Functions requires the project to use the
+Blaze plan and may enable required Google Cloud APIs and create billable
+resources. No Functions deployment may occur until the owner explicitly
+approves billing and deployment. After approval, deploy only the `ramino2`
+Functions codebase, verify every function reports `africa-south1`, and perform
+the two-device smoke test before wider access.
+
+### Production test readiness
+
+The automated emulator flow covers two independent anonymous users, room
+creation, joining, reconnection, game start, private-hand isolation, synchronized
+revisions, and a server-validated first action. Real-device testing still
+requires Anonymous Authentication, reviewed Firestore rules/indexes, and the
+callable Functions to be deployed. App Check, abuse controls, monitoring, and
+room cleanup remain pre-broad-release hardening work.
 
 ### Phase 3 — expandable competition platform
 

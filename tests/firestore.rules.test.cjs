@@ -14,7 +14,7 @@ before(async () => {
   const [host = '127.0.0.1', port = '8080'] =
     (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':');
   environment = await initializeTestEnvironment({
-    projectId: 'tigray-ramino-2-rules-test',
+    projectId: 'tigray-ramino-2-prod',
     firestore: {
       host,
       port: Number(port),
