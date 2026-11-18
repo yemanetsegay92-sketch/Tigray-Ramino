@@ -5,6 +5,15 @@
 
     function start() {
 
+        try {
+            window.Telegram?.WebApp?.ready();
+            window.Telegram?.WebApp?.expand();
+            window.Telegram?.WebApp?.setHeaderColor?.('#0f2a1a');
+            window.Telegram?.WebApp?.setBackgroundColor?.('#0f2a1a');
+        } catch (error) {
+            console.warn('Telegram Web App setup was unavailable:', error);
+        }
+
         TR.initDOM();
 
         // ------------------------------------------------------------

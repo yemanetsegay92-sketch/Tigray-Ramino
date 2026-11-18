@@ -1,1480 +1,317 @@
-/* ================================================================
-   TIGRAY RAMINO — MULTIPLAYER GAME STAGE 2A
-
-   Stage 2A:
-   - Host starts the game
-   - Firestore stores shared game state
-   - Private hands are stored separately
-   - Deck is synchronized
-   - Discard pile is synchronized
-   - Draw is synchronized
-   - Take-discard is synchronized
-   - Discard is synchronized
-   - Current player is synchronized
-   - Existing Ramino engine/rules are preserved
-
-   Turn actions publish public combinations and the private hand atomically.
-   Opening attempts, Joker swaps, Monte and elimination are synchronized.
-   ================================================================ */
-
+/* Tigray Ramino 2.0 — read-only synchronized client; actions execute on server. */
 (function () {
     'use strict';
 
     const TR = window.TigrayRamino;
-
-    if (!TR) {
-        console.error(
-            'TigrayRamino engine is not loaded.'
-        );
-        return;
-    }
+    if (!TR) return;
 
     const GameMP = {
-
         roomId: null,
         playerId: null,
         playerIndex: null,
-
         unsubscribeGame: null,
         unsubscribePrivate: null,
-
-        syncing: false,
+        latestPublic: null,
+        latestPrivate: null,
+        actionPending: false,
         patched: false,
-
-        originalActions: null,
-
-
-        // ============================================================
-        // WAIT FOR FIREBASE
-        // ============================================================
+        originalActions: {},
 
         async waitForFirebase() {
-
-            if (window.RaminoFirebase) {
-                return window.RaminoFirebase;
-            }
-
-            return new Promise((resolve, reject) => {
-
-                let attempts = 0;
-
-                const timer = setInterval(() => {
-
-                    if (window.RaminoFirebase) {
-
-                        clearInterval(timer);
-
-                        resolve(
-                            window.RaminoFirebase
-                        );
-
-                        return;
-                    }
-
-                    attempts++;
-
-                    if (attempts > 100) {
-
-                        clearInterval(timer);
-
-                        reject(
-                            new Error(
-                                'Firebase did not load.'
-                            )
-                        );
-                    }
-
-                }, 100);
-            });
+            if (!window.RaminoFirebase) throw new Error('Firebase is not ready.');
+            await window.RaminoFirebase.ready;
+            return window.RaminoFirebase;
         },
-
-
-        // ============================================================
-        // CARD CONVERSION
-        // ============================================================
-
-        cardData(card) {
-
-            if (!card) {
-                return null;
-            }
-
-            return {
-                id: String(card.id),
-                suit: card.suit,
-                rank: card.rank
-            };
-        },
-
-
-        cardsData(cards) {
-
-            return (cards || [])
-                .filter(Boolean)
-                .map(card =>
-                    this.cardData(card)
-                );
-        },
-
-
-        cardsFromData(cards) {
-
-            return (cards || [])
-                .filter(Boolean)
-                .map(card => ({
-                    id: String(card.id),
-                    suit: card.suit,
-                    rank: card.rank
-                }));
-        },
-
-
-        // ============================================================
-        // COMBO CONVERSION
-        // ============================================================
-
-        comboData(combo) {
-
-            return {
-
-                contributors:{...combo.contributors},
-                cards:
-                    this.cardsData(
-                        combo.cards
-                    ),
-
-                type:
-                    combo.type ||
-                    'sequence',
-
-                points:
-                    Number(
-                        combo.points || 0
-                    ),
-
-                displayCards:
-                    (combo.displayCards || [])
-                        .map(dc => ({
-
-                            card:
-                                this.cardData(
-                                    dc.card
-                                ),
-
-                            displayRank:
-                                dc.displayRank,
-
-                            displaySuit:
-                                dc.displaySuit
-                        }))
-            };
-        },
-
-
-        // ============================================================
-        // PLAYER PUBLIC DATA
-        // ============================================================
-
-        playerPublicData(player) {
-
-            return {
-
-                opened:
-                    !!player.opened,
-
-                combos:
-                    (player.combos || [])
-                        .map(combo =>
-                            this.comboData(combo)
-                        ),
-
-                handCount:
-                    (player.hand || []).length
-            };
-        },
-
-
-        // ============================================================
-        // START
-        // ============================================================
 
         async start(room) {
+            if (!room?.id) throw new Error('No multiplayer room is active.');
+            const Firebase = await this.waitForFirebase();
+            const playerId = Firebase.auth.currentUser?.uid;
+            if (!playerId) throw new Error('Player identity is unavailable.');
 
-            if (!room || !room.id) {
-
-                throw new Error(
-                    'No multiplayer room is active.'
-                );
-            }
-
-
-            if (!TR) {
-
-                throw new Error(
-                    'Ramino engine is not loaded.'
-                );
-            }
-
-
-            this.roomId =
-                room.id;
-
-
-            this.playerId =
-                window
-                    .TigrayRaminoMultiplayer
-                    ?.player
-                    ?.id || null;
-
-
-            if (!this.playerId) {
-
-                throw new Error(
-                    'Player identity not found.'
-                );
-            }
-
-
-            const Firebase =
-                await this.waitForFirebase();
-
-
-            const db =
-                Firebase.db;
-
-
-            // --------------------------------------------------------
-            // ROOM
-            // --------------------------------------------------------
-
-            const roomRef =
-                Firebase.doc(
-                    db,
-                    'rooms',
-                    this.roomId
-                );
-
-
-            const roomSnap =
-                await Firebase.getDoc(
-                    roomRef
-                );
-
-
-            if (!roomSnap.exists()) {
-
-                throw new Error(
-                    'Room no longer exists.'
-                );
-            }
-
-
-            const roomData =
-                roomSnap.data();
-
-
-            const players =
-                roomData.players || {};
-
-
-            const playerIds =
-                Object.keys(players);
-
-
-            // --------------------------------------------------------
-            // MINIMUM PLAYERS
-            // --------------------------------------------------------
-
-            if (playerIds.length < 2) {
-
-                this.setStatus(
-                    '⏳ Need at least 2 players to start.'
-                );
-
-                return false;
-            }
-
-
-            // --------------------------------------------------------
-            // HOST
-            // --------------------------------------------------------
-
-            const isHost =
-                roomData.hostId ===
-                this.playerId;
-
-
-            if (!isHost) {
-
-    // Player 2+ does NOT create the game.
-    // They only enter the online game when
-    // the host has started it.
-
-    this.enterOnlineGame(room);
-
-    return true;
-}
-
-
-            // --------------------------------------------------------
-            // GAME DOCUMENT
-            // --------------------------------------------------------
-
-            const gameRef =
-                Firebase.doc(
-                    db,
-                    'rooms',
-                    this.roomId,
-                    'game',
-                    'state'
-                );
-
-
-            const existing =
-                await Firebase.getDoc(
-                    gameRef
-                );
-
-
-            if (
-                existing.exists() &&
-                existing.data().status === 'playing'
-            ) {
-
-                this.listen(room);
-
-                this.patchActions();
-
+            if (this.roomId === room.id && this.unsubscribeGame && this.unsubscribePrivate) {
+                this.enterOnlineGame();
                 return true;
             }
 
-
-            // ========================================================
-            // INITIALIZE EXISTING RAMINO ENGINE
-            // ========================================================
-// This is an ONLINE multiplayer game.
-// Do not use the local pass-the-phone flow.
-TR.G.multiplayer = true;
-            TR.initGame(
-                playerIds.length
-            );
-
-
-            // Remove local pass-phone modal.
-            const modal =
-                document.querySelector(
-                    '.modal-overlay'
-                );
-
-
-            if (modal) {
-                modal.remove();
-            }
-
-
-            TR.modalActive =
-                false;
-
-
-            // ========================================================
-            // PLAYER ORDER
-            // ========================================================
-
-            const ordered =
-                playerIds.slice().sort(
-                    (a, b) => {
-
-                        if (
-                            a === roomData.hostId
-                        ) {
-                            return -1;
-                        }
-
-                        if (
-                            b === roomData.hostId
-                        ) {
-                            return 1;
-                        }
-
-                        const at =
-                            players[a]
-                                ?.joinedAt
-                                ?.seconds || 0;
-
-                        const bt =
-                            players[b]
-                                ?.joinedAt
-                                ?.seconds || 0;
-
-                        return at - bt;
-                    }
-                );
-
-
-            // ========================================================
-            // PUBLIC PLAYERS
-            // ========================================================
-
-            const publicPlayers = [];
-
-
-            const privateWrites = [];
-
-
-            for (
-                let i = 0;
-                i < ordered.length;
-                i++
-            ) {
-
-                const uid =
-                    ordered[i];
-
-
-                const localPlayer =
-                    TR.G.players[i];
-
-
-                if (!localPlayer) {
-                    continue;
-                }
-
-
-                publicPlayers.push({
-
-                    id:
-                        uid,
-
-                    firstName:
-                        players[uid]
-                            ?.firstName ||
-                        `Player ${i + 1}`,
-
-                    username:
-                        players[uid]
-                            ?.username ||
-                        '',
-
-                    index:
-                        i,
-
-                    opened:
-                        !!localPlayer.opened,
-
-                    handCount:
-                        localPlayer.hand.length,
-
-                    combos:
-                        (localPlayer.combos || [])
-                            .map(combo =>
-                                this.comboData(combo)
-                            )
-                });
-
-
-                // ----------------------------------------------------
-                // PRIVATE HAND
-                // ----------------------------------------------------
-
-                privateWrites.push(
-
-                    Firebase.setDoc(
-
-                        Firebase.doc(
-
-                            db,
-
-                            'rooms',
-                            this.roomId,
-
-                            'privateHands',
-                            uid
-                        ),
-
-                        {
-
-                            playerId:
-                                uid,
-
-                            hand:
-                                this.cardsData(
-                                    localPlayer.hand
-                                ),
-
-                            handCount:
-                                localPlayer.hand.length,
-
-                            updatedAt:
-                                Firebase.serverTimestamp()
-                        }
-                    )
-                );
-            }
-
-
-            await Promise.all(
-                privateWrites
-            );
-
-
-            // ========================================================
-            // SHARED GAME STATE
-            // ========================================================
-
-            const publicState = {
-
-                revision:0,
-                openingAttempt:false,
-                firstDiscardPending:true,
-                jokerSwapActive:false,
-                status:
-                    'playing',
-
-                roomId:
-                    this.roomId,
-
-                playerIds:
-                    ordered,
-
-                players:
-                    publicPlayers,
-
-                currentPlayer:
-                    0,
-
-                phase:
-                    TR.G.phase,
-
-                deck:
-                    this.cardsData(
-                        TR.G.deck
-                    ),
-
-                deckCount:
-                    TR.G.deck.length,
-
-                discardPile:
-                    this.cardsData(
-                        TR.G.discardPile
-                    ),
-
-                winner:
-                    null,
-
-                eliminated:
-                    [],
-
-                lastDiscardJoker:
-                    false,
-
-                monteMode:
-                    false,
-
-                montePlayer:
-                    null,
-
-                mustOpen:
-                    false,
-
-                startedAt:
-                    Firebase.serverTimestamp(),
-
-                updatedAt:
-                    Firebase.serverTimestamp()
-            };
-
-
-            await Firebase.setDoc(
-                gameRef,
-                publicState
-            );
-
-
-            // --------------------------------------------------------
-            // UPDATE ROOM STATUS
-            // --------------------------------------------------------
-
-            await Firebase.updateDoc(
-                roomRef,
-                {
-
-                    status:
-                        'playing',
-
-                    updatedAt:
-                        Firebase.serverTimestamp()
-                }
-            );
-
-
-            this.setStatus(
-                '🎮 Game started!'
-            );
-
-
+            this.stopListeners();
+            this.roomId = room.id;
+            this.playerId = playerId;
+            this.latestPublic = null;
+            this.latestPrivate = null;
             this.patchActions();
-
-
-            this.listen(room);
-
-
+            this.enterOnlineGame();
+            this.listen();
             return true;
         },
 
-
-        // ============================================================
-        // ENTER ONLINE GAME — NON-HOST PLAYERS
-        // ============================================================
-
-        enterOnlineGame(room) {
-
-            if (!room || !room.id) {
-                return;
-            }
-
-            this.roomId =
-                room.id;
-
-            this.playerId =
-                window
-                    .TigrayRaminoMultiplayer
-                    ?.player
-                    ?.id || null;
-
-            if (!this.playerId) {
-
-                console.error(
-                    'Online player identity not found.'
-                );
-
-                return;
-            }
-
-            // This is an ONLINE game.
-            // Do not use local pass-the-phone behavior.
+        enterOnlineGame() {
             TR.G.multiplayer = true;
-
-            // Initialize local engine structure.
-            // Firestore will provide the real shared state.
-            TR.initGame(2);
-
-            // Remove local pass-phone modal.
-            const modal =
-                document.querySelector(
-                    '.modal-overlay'
-                );
-
-            if (modal) {
-                modal.remove();
-            }
-
+            document.querySelector('.modal-overlay')?.remove();
             TR.modalActive = false;
-
-            // Connect game actions to multiplayer.
-            this.patchActions();
-
-            // Listen to Firestore.
-            this.listen(room);
-
-            // Close the multiplayer lobby.
-            if (
-                window.TigrayRaminoMultiplayer &&
-                typeof window
-                    .TigrayRaminoMultiplayer
-                    .closeLobby === 'function'
-            ) {
-
-                window
-                    .TigrayRaminoMultiplayer
-                    .closeLobby();
-            }
+            const modeScreen = document.getElementById('mode-screen');
+            const app = document.getElementById('app');
+            if (modeScreen) modeScreen.style.display = 'none';
+            if (app) app.style.display = 'block';
+            window.TigrayRaminoMultiplayer?.closeLobby(true);
+            this.setStatus('Reconnecting to the secure game state…');
         },
-
-        //      ============================================================
-        // PATCH EXISTING RAMINO ACTIONS
-        // ============================================================
 
         patchActions() {
-            if(this.patched)return;
-            this.patched=true;
-            this.originalActions={};
-            for(const name of ['doDraw','doTakeDiscard','doDiscardCard','doOpenCombo',
-                'doAddToCombo','tryJokerSwap','doJokerSwap','doMonteWin']){
-                const original=TR[name];
-                this.originalActions[name]=original;
-                TR[name]=(...args)=>{
-                    if(!TR.G.multiplayer)return original.apply(TR,args);
-                    return this.requestAction(name,args);
+            if (this.patched) return;
+            this.patched = true;
+            const names = [
+                'doDraw', 'doTakeDiscard', 'doDiscardCard', 'doOpenCombo',
+                'doAddToCombo', 'tryJokerSwap', 'doJokerSwap', 'doMonteWin'
+            ];
+            names.forEach(name => {
+                const original = TR[name];
+                this.originalActions[name] = original;
+                TR[name] = (...args) => {
+                    if (!TR.G.multiplayer) return original.apply(TR, args);
+                    return this.requestAction(name, args);
                 };
-            }
+            });
         },
 
-        // ============================================================
-        // CHECK MY TURN
-        // ============================================================
+        wireAction(name, args) {
+            const player = TR.G.players?.[this.playerIndex];
+            switch (name) {
+                case 'doDraw': return { type: 'draw' };
+                case 'doTakeDiscard': return { type: 'takeDiscard' };
+                case 'doDiscardCard': return { type: 'discard', cardId: String(args[0]?.id || '') };
+                case 'doOpenCombo': return {
+                    type: 'openCombo',
+                    cardIds: (args[0] || []).map(card => String(card.id))
+                };
+                case 'doAddToCombo': return {
+                    type: 'addToCombo',
+                    cardId: String(args[0]?.id || ''),
+                    targetPlayerIndex: Number(args[1]),
+                    targetComboIndex: Number(args[2])
+                };
+                case 'tryJokerSwap': {
+                    const selectedIndex = TR.G.selected?.[0];
+                    return {
+                        type: 'swapJoker',
+                        cardId: String(player?.hand?.[selectedIndex]?.id || ''),
+                        targetPlayerIndex: Number(args[0]),
+                        targetComboIndex: Number(args[1]),
+                        jokerCardIndex: Number(args[2])
+                    };
+                }
+                case 'doJokerSwap': return { type: 'swapJokerAuto' };
+                case 'doMonteWin': return { type: 'monteWin' };
+                default: throw new Error('Unsupported action.');
+            }
+        },
 
         isMyTurn() {
-
-            if (
-                !this.playerIndex &&
-                this.playerIndex !== 0
-            ) {
-                return false;
-            }
-
-            return (
-                TR.G.currentPlayer ===
-                this.playerIndex
-            );
+            return Number.isInteger(this.playerIndex) &&
+                this.playerIndex >= 0 && TR.G.currentPlayer === this.playerIndex;
         },
 
-
-        async requestAction(name,args) {
-            if(this.syncing)return;
-            if(!this.isMyTurn()){
-                this.setStatus('⏳ It is not your turn.'); return;
+        async requestAction(name, args) {
+            if (this.actionPending) {
+                this.setStatus('Your previous action is still being confirmed.');
+                return;
             }
-            const before=JSON.parse(JSON.stringify(TR.G));
-            this.syncing=true;
-            try{
-                this.originalActions[name].apply(TR,args);
-                if(JSON.stringify(TR.G)!==JSON.stringify(before)){
-                    await this.publishCurrentState(before);
-                }
-            }catch(error){
-                TR.G=before;
-                this.setStatus('❌ Action was not saved: '+error.message);
-            }finally{
-                // Suppress intermediate snapshots, then refresh state and hand.
-                try{
-                    const F=await this.waitForFirebase();
-                    const [game,hand]=await Promise.all([
-                        F.getDoc(F.doc(F.db,'rooms',this.roomId,'game','state')),
-                        F.getDoc(F.doc(F.db,'rooms',this.roomId,'privateHands',this.playerId))
-                    ]);
-                    this.syncing=false;
-                    if(game.exists())this.applyPublicState(game.data());
-                    if(hand.exists())this.applyPrivateHand(hand.data().hand||[]);
-                }catch(error){
-                    this.syncing=false;
-                    this.setStatus('⚠️ Connection interrupted. Reconnect before continuing.');
-                }
+            if (!this.isMyTurn()) {
+                this.setStatus('It is not your turn.');
+                return;
             }
-        },
-
-        async publishCurrentState(before) {
-            const F=await this.waitForFirebase();
-            const gameRef=F.doc(F.db,'rooms',this.roomId,'game','state');
-            const privateRef=F.doc(F.db,'rooms',this.roomId,'privateHands',this.playerId);
-            const myPlayer=TR.G.players[this.playerIndex];
-            if(!myPlayer)throw new Error('Local player state not found.');
-            const update={
-                currentPlayer:TR.G.currentPlayer, phase:TR.G.phase,
-                deck:this.cardsData(TR.G.deck), deckCount:TR.G.deck.length,
-                discardPile:this.cardsData(TR.G.discardPile), winner:TR.G.winner,
-                eliminated:TR.G.eliminated.slice(), lastDiscardJoker:!!TR.G.lastDiscardJoker,
-                monteMode:!!TR.G.monteMode, montePlayer:TR.G.montePlayer,
-                mustOpen:!!TR.G.mustOpen, openingAttempt:!!TR.G.openingAttempt,
-                firstDiscardPending:!!TR.G.firstDiscardPending,
-                jokerSwapActive:!!TR.G.jokerSwapActive,
-                revision:(before.networkRevision||0)+1, updatedAt:F.serverTimestamp()
-            };
-            const hand={playerId:this.playerId,hand:this.cardsData(myPlayer.hand),
-                handCount:myPlayer.hand.length,updatedAt:F.serverTimestamp()};
-            // Retrying a transaction never repeats the local draw/discard.
-            await F.runTransaction(F.db,async transaction=>{
-                const snapshot=await transaction.get(gameRef);
-                if(!snapshot.exists())throw new Error('Game not found.');
-                const current=snapshot.data();
-                if((current.revision||0)!==(before.networkRevision||0) ||
-                    current.currentPlayer!==this.playerIndex || current.winner!=null ||
-                    current.phase!==before.phase){
-                    throw new Error('The game changed. Your hand has been refreshed; try again.');
-                }
-                update.players=TR.G.players.map((player,index)=>({
-                    ...(current.players[index]||{}),
-                    opened:!!player.opened,
-                    combos:(player.combos||[]).map(combo=>this.comboData(combo)),
-                    handCount:index===this.playerIndex?myPlayer.hand.length:
-                        (current.players[index]?.handCount||0)
-                }));
-                transaction.update(gameRef,update);
-                transaction.set(privateRef,hand);
-            });
-            TR.G.networkRevision=update.revision;
-        },
-
-        listen(room) {
-
-            if (
-                !room ||
-                !room.id
-            ) {
+            let action;
+            try {
+                action = this.wireAction(name, args);
+            } catch (error) {
+                this.setStatus(error.message);
                 return;
             }
 
-
-            this.roomId =
-                room.id;
-
-
-            this.waitForFirebase()
-                .then(Firebase => {
-
-                    const db =
-                        Firebase.db;
-
-
-                    // ------------------------------------------------
-                    // STOP OLD LISTENERS
-                    // ------------------------------------------------
-
-                    if (
-                        this.unsubscribeGame
-                    ) {
-
-                        this.unsubscribeGame();
-
-                        this.unsubscribeGame =
-                            null;
-                    }
-
-
-                    if (
-                        this.unsubscribePrivate
-                    ) {
-
-                        this.unsubscribePrivate();
-
-                        this.unsubscribePrivate =
-                            null;
-                    }
-
-
-                    // ------------------------------------------------
-                    // GAME STATE
-                    // ------------------------------------------------
-
-                    const gameRef =
-                        Firebase.doc(
-
-                            db,
-
-                            'rooms',
-                            this.roomId,
-
-                            'game',
-                            'state'
-                        );
-
-
-                    this.unsubscribeGame =
-
-                        Firebase.onSnapshot(
-
-                            gameRef,
-
-                            snapshot => {
-
-                                if (
-                                    !snapshot.exists()
-                                ) {
-                                    return;
-                                }
-
-
-                                const state =
-                                    snapshot.data();
-
-
-                                if (
-                                    state.status !==
-                                    'playing'
-                                ) {
-                                    return;
-                                }
-
-
-                                this.applyPublicState(
-                                    state
-                                );
-
-
-                                // ------------------------------------
-                                // PRIVATE HAND
-                                // ------------------------------------
-
-                                const myId =
-                                    window
-                                        .TigrayRaminoMultiplayer
-                                        ?.player
-                                        ?.id;
-
-
-                                if (!myId) {
-                                    return;
-                                }
-
-
-                                const privateRef =
-                                    Firebase.doc(
-
-                                        db,
-
-                                        'rooms',
-                                        this.roomId,
-
-                                        'privateHands',
-                                        myId
-                                    );
-
-
-                                if (
-                                    this.unsubscribePrivate
-                                ) {
-
-                                    this.unsubscribePrivate();
-
-                                    this.unsubscribePrivate =
-                                        null;
-                                }
-
-
-                                this.unsubscribePrivate =
-
-                                    Firebase.onSnapshot(
-
-                                        privateRef,
-
-                                        privateSnap => {
-
-                                            if (
-                                                !privateSnap.exists()
-                                            ) {
-                                                return;
-                                            }
-
-
-                                            const data =
-                                                privateSnap.data();
-
-
-                                            this.applyPrivateHand(
-                                                data.hand ||
-                                                []
-                                            );
-                                        }
-                                    );
-                            },
-
-                            error => {
-
-                                console.error(
-                                    'Multiplayer game listener error:',
-                                    error
-                                );
-
-
-                                this.setStatus(
-                                    '❌ Game connection error.'
-                                );
-                            }
-                        );
-                })
-                .catch(error => {
-
-                    console.error(
-                        'Multiplayer listen error:',
-                        error
-                    );
-
-                    this.setStatus(
-                        '❌ Could not connect to multiplayer game.'
-                    );
+            this.actionPending = true;
+            this.setStatus('Confirming action…');
+            try {
+                const actionId = globalThis.crypto?.randomUUID
+                    ? globalThis.crypto.randomUUID()
+                    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                const result = await window.RaminoFirebase.submitAction({
+                    roomCode: this.roomId,
+                    actionId,
+                    expectedRevision: Number(TR.G.networkRevision || 0),
+                    action
                 });
-        },
-
-
-        // ============================================================
-        // APPLY PUBLIC STATE
-        // ============================================================
-
-        applyPublicState(state) {
-            if(this.syncing)return;
-            TR.G.networkRevision=state.revision||0;
-            TR.G.openingAttempt=!!state.openingAttempt;
-            TR.G.firstDiscardPending=!!state.firstDiscardPending;
-            TR.G.jokerSwapActive=!!state.jokerSwapActive;
-
-            if (!TR) {
-                return;
-            }
-
-
-            const orderedIds =
-                state.playerIds || [];
-
-
-            const publicPlayers =
-                Array.isArray(state.players)
-                    ? state.players
-                    : [];
-
-
-            TR.G.numPlayers =
-                orderedIds.length || 2;
-
-
-            TR.G.currentPlayer =
-                Number.isInteger(
-                    state.currentPlayer
-                )
-                    ? state.currentPlayer
-                    : 0;
-
-
-            TR.G.phase =
-                state.phase ||
-                'draw';
-
-
-            TR.G.winner =
-                state.winner === null ||
-                state.winner === undefined
-
-                    ? null
-
-                    : state.winner;
-
-
-            TR.G.eliminated =
-                Array.isArray(
-                    state.eliminated
-                )
-                    ? state.eliminated.slice()
-                    : [];
-
-
-            TR.G.lastDiscardJoker =
-                !!state.lastDiscardJoker;
-
-
-            TR.G.monteMode =
-                !!state.monteMode;
-
-
-            TR.G.montePlayer =
-                state.montePlayer === null ||
-                state.montePlayer === undefined
-
-                    ? null
-
-                    : state.montePlayer;
-
-
-            TR.G.mustOpen =
-                !!state.mustOpen;
-
-
-                        // ========================================================
-            // FIND OUR PLAYER INDEX
-            // ========================================================
-
-            const myId =
-                window
-                    .TigrayRaminoMultiplayer
-                    ?.player
-                    ?.id;
-
-            this.playerIndex =
-                orderedIds.indexOf(
-                    myId
-                );
-
-
-            // ========================================================
-            // PUBLIC PLAYERS
-            // ========================================================
-
-            const existingMyHand =
-                this.playerIndex !== null &&
-                this.playerIndex !== undefined &&
-                this.playerIndex >= 0 &&
-                TR.G.players[this.playerIndex]
-                    ? TR.G.players[this.playerIndex].hand || []
-                    : [];
-
-
-            TR.G.players =
-                publicPlayers.map(
-                    (pp, index) => ({
-
-                        // Keep MY private hand locally.
-                        // Other players' hands remain private.
-                        hand:
-                            index === this.playerIndex
-                                ? existingMyHand
-                                : [],
-
-                        combos:
-                            (pp.combos || [])
-                                .map(c => ({
-
-                                    cards:
-                                        (c.cards || [])
-                                            .map(x => ({
-                                                ...x
-                                            })),
-
-                                    contributors:{...c.contributors},
-                                    type:
-                                        c.type ||
-                                        'sequence',
-
-                                    points:
-                                        Number(
-                                            c.points || 0
-                                        ),
-
-                                    displayCards:
-                                        (c.displayCards || [])
-                                            .map(dc => ({
-
-                                                card:
-                                                    dc.card
-                                                        ? {
-                                                            ...dc.card
-                                                        }
-                                                        : null,
-
-                                                displayRank:
-                                                    dc.displayRank,
-
-                                                displaySuit:
-                                                    dc.displaySuit
-                                            }))
-                                })),
-
-                        opened:
-                            !!pp.opened
-                    })
-                );
-
-            // ========================================================
-            // PUBLIC DISCARD PILE
-            // ========================================================
-
-            TR.G.discardPile =
-                (state.discardPile || [])
-                    .map(
-                        c => ({
-                            ...c
-                        })
-                    );
-
-
-            // ========================================================
-// SYNCHRONIZED DECK
-//
-// The multiplayer game needs the actual card objects here.
-// Using null placeholders causes the existing Ramino draw
-// function to fail when it tries to read card.id.
-// ========================================================
-TR.G.deck =
-    this.cardsFromData(
-        state.deck || []
-    );
-
-
-
-            // ========================================================
-            // RESET LOCAL SELECTION
-            // ========================================================
-
-            TR.G.selected =
-                [];
-
-
-            TR.G.jokerSwapActive =
-                !!state.jokerSwapActive;
-
-            if(TR.G.winner!==null){
-                this.setStatus(`🏆 Player ${TR.G.winner+1} wins!`);
-            }else if(TR.G.eliminated.includes(this.playerIndex)){
-                this.setStatus('❌ You have been eliminated from this round.');
-            }
-
-
-            // ========================================================
-            // RENDER
-            // ========================================================
-
-            if (
-                typeof TR.renderAll ===
-                'function'
-            ) {
-
-                TR.renderAll();
-            }
-
-
-            // ========================================================
-            // TURN MESSAGE
-            // ========================================================
-
-            if (
-                TR.G.currentPlayer ===
-                this.playerIndex
-            ) {
-
-                this.setStatus(
-                    '👉 Your turn.'
-                );
-
-            } else {
-
-                this.setStatus(
-                    `⏳ Waiting for Player ${
-                        TR.G.currentPlayer + 1
-                    }...`
-                );
+                this.setStatus(result.message || 'Action confirmed.');
+            } catch (error) {
+                this.setStatus(this.errorMessage(error));
+            } finally {
+                this.actionPending = false;
             }
         },
 
-// ============================================================
-// LOCAL HAND ORDER
-// Rearranging cards never uses the network.
-// Only the preferred card order is stored locally.
-// ============================================================
-
-saveLocalHandOrder() {
-
-    if (!this.roomId || !this.playerId) {
-        return;
-    }
-
-    if (
-        this.playerIndex === null ||
-        this.playerIndex === undefined ||
-        this.playerIndex < 0
-    ) {
-        return;
-    }
-
-    const player =
-        TR.G.players[this.playerIndex];
-
-    if (!player || !Array.isArray(player.hand)) {
-        return;
-    }
-
-    const order =
-        player.hand.map(card => String(card.id));
-
-    try {
-
-        localStorage.setItem(
-            `ramino_hand_order_${this.roomId}_${this.playerId}`,
-            JSON.stringify(order)
-        );
-
-    } catch (error) {
-
-        console.warn(
-            'Could not save local hand order:',
-            error
-        );
-    }
-},
-
-
-applyLocalHandOrder(hand) {
-
-    if (!this.roomId || !this.playerId) {
-        return hand;
-    }
-
-    let savedOrder = null;
-
-    try {
-
-        const raw =
-            localStorage.getItem(
-                `ramino_hand_order_${this.roomId}_${this.playerId}`
+        listen() {
+            const Firebase = window.RaminoFirebase;
+            const publicRef = Firebase.doc(Firebase.db, 'rooms', this.roomId, 'game', 'public');
+            const privateRef = Firebase.doc(
+                Firebase.db, 'rooms', this.roomId, 'privateHands', this.playerId
             );
 
-        if (raw) {
-            savedOrder = JSON.parse(raw);
-        }
+            this.unsubscribeGame = Firebase.onSnapshot(publicRef, snapshot => {
+                if (!snapshot.exists()) return;
+                this.latestPublic = snapshot.data();
+                this.flushSnapshots();
+            }, error => this.setStatus(`Game connection interrupted: ${this.errorMessage(error)}`));
 
-    } catch (error) {
+            this.unsubscribePrivate = Firebase.onSnapshot(privateRef, snapshot => {
+                if (!snapshot.exists()) return;
+                this.latestPrivate = snapshot.data();
+                this.flushSnapshots();
+            }, error => this.setStatus(`Private hand connection interrupted: ${this.errorMessage(error)}`));
+        },
 
-        console.warn(
-            'Could not read local hand order:',
-            error
-        );
-    }
+        flushSnapshots() {
+            if (!this.latestPublic || !this.latestPrivate) return;
+            if (this.latestPublic.revision !== this.latestPrivate.revision) {
+                this.setStatus('Synchronizing the latest turn…');
+                return;
+            }
+            this.applySynchronizedState(this.latestPublic, this.latestPrivate);
+        },
 
-    if (
-        !Array.isArray(savedOrder) ||
-        !savedOrder.length
-    ) {
-        return hand;
-    }
-
-    const byId =
-        new Map(
-            hand.map(card => [
-                String(card.id),
-                card
-            ])
-        );
-
-    const ordered = [];
-
-    // First restore the player's previous arrangement.
-    for (const id of savedOrder) {
-
-        const card =
-            byId.get(String(id));
-
-        if (card) {
-
-            ordered.push(card);
-
-            byId.delete(String(id));
-        }
-    }
-
-    // Any new cards are appended automatically.
-    for (const card of byId.values()) {
-        ordered.push(card);
-    }
-
-    return ordered;
-},
-        // ============================================================
-        // APPLY PRIVATE HAND
-        // ============================================================
-
-        applyPrivateHand(hand) {
-            if(this.syncing)return;
-
-            if (
-                this.playerIndex === null ||
-                this.playerIndex === undefined ||
-                this.playerIndex < 0
-            ) {
+        applySynchronizedState(state, privateState) {
+            const orderedIds = Array.isArray(state.playerIds) ? state.playerIds : [];
+            this.playerIndex = orderedIds.indexOf(this.playerId);
+            if (this.playerIndex < 0) {
+                this.setStatus('You are no longer a member of this game.');
                 return;
             }
 
+            const existingHand = this.applyLocalHandOrder(this.cardsFromData(privateState.hand || []));
+            TR.G.numPlayers = orderedIds.length;
+            TR.G.currentPlayer = Number(state.currentPlayer || 0);
+            TR.G.phase = state.phase || 'draw';
+            TR.G.winner = state.winner ?? null;
+            TR.G.eliminated = Array.isArray(state.eliminated) ? state.eliminated.slice() : [];
+            TR.G.lastDiscardJoker = !!state.lastDiscardJoker;
+            TR.G.monteMode = !!state.monteMode;
+            TR.G.montePlayer = state.montePlayer ?? null;
+            TR.G.mustOpen = !!state.mustOpen;
+            TR.G.openingAttempt = !!state.openingAttempt;
+            TR.G.firstDiscardPending = !!state.firstDiscardPending;
+            TR.G.jokerSwapActive = !!state.jokerSwapActive;
+            TR.G.networkRevision = Number(state.revision || 0);
+            TR.G.multiplayer = true;
+            TR.G.discardPile = this.cardsFromData(state.discardPile || []);
+            TR.G.deck = Array.from({ length: Number(state.deckCount || 0) }, (_, index) => ({
+                id: `hidden-${index}`,
+                rank: '',
+                suit: ''
+            }));
+            TR.G.selected = [];
+            TR.G.players = (state.players || []).map((publicPlayer, index) => ({
+                hand: index === this.playerIndex ? existingHand : [],
+                opened: !!publicPlayer.opened,
+                handCount: Number(publicPlayer.handCount || 0),
+                combos: (publicPlayer.combos || []).map(combo => this.comboFromData(combo))
+            }));
 
-            if (
-                !TR.G.players[
-                    this.playerIndex
-                ]
-            ) {
-                return;
-            }
-
-
-            const incomingHand =
-    this.cardsFromData(hand);
-
-TR.G.players[
-    this.playerIndex
-].hand =
-    this.applyLocalHandOrder(
-        incomingHand
-    );
-
-
-            if (
-                typeof TR.renderAll ===
-                'function'
-            ) {
-
-                TR.renderAll();
+            TR.renderAll?.();
+            if (TR.G.winner !== null) {
+                this.setStatus(`Player ${TR.G.winner + 1} wins!`);
+            } else if (TR.G.eliminated.includes(this.playerIndex)) {
+                this.setStatus('You have been eliminated from this round.');
+            } else if (this.isMyTurn()) {
+                this.setStatus('Your turn.');
+            } else {
+                this.setStatus(`Waiting for Player ${TR.G.currentPlayer + 1}…`);
             }
         },
 
+        cardsFromData(cards) {
+            return (cards || []).filter(Boolean).map(card => ({
+                id: String(card.id),
+                suit: card.suit,
+                rank: card.rank
+            }));
+        },
 
-        // ============================================================
-// STATUS
-// ============================================================
+        comboFromData(combo) {
+            return {
+                contributors: { ...(combo.contributors || {}) },
+                cards: this.cardsFromData(combo.cards),
+                type: combo.type || 'sequence',
+                points: Number(combo.points || 0),
+                displayCards: (combo.displayCards || []).map(display => ({
+                    card: display.card ? { ...display.card, id: String(display.card.id) } : null,
+                    displayRank: display.displayRank,
+                    displaySuit: display.displaySuit
+                }))
+            };
+        },
 
-setStatus(message) {
+        saveLocalHandOrder() {
+            const hand = TR.G.players?.[this.playerIndex]?.hand;
+            if (!this.roomId || !this.playerId || !Array.isArray(hand)) return;
+            try {
+                localStorage.setItem(
+                    `ramino_hand_order_${this.roomId}_${this.playerId}`,
+                    JSON.stringify(hand.map(card => String(card.id)))
+                );
+            } catch (error) {
+                console.warn('Could not save hand order:', error);
+            }
+        },
 
-    const el =
-        document.getElementById(
-            'mp-status'
-        );
+        applyLocalHandOrder(hand) {
+            if (!this.roomId || !this.playerId) return hand;
+            try {
+                const saved = JSON.parse(localStorage.getItem(
+                    `ramino_hand_order_${this.roomId}_${this.playerId}`
+                ) || '[]');
+                if (!Array.isArray(saved) || !saved.length) return hand;
+                const byId = new Map(hand.map(card => [String(card.id), card]));
+                const ordered = [];
+                saved.forEach(id => {
+                    const card = byId.get(String(id));
+                    if (card) {
+                        ordered.push(card);
+                        byId.delete(String(id));
+                    }
+                });
+                return [...ordered, ...byId.values()];
+            } catch (error) {
+                return hand;
+            }
+        },
 
-    if (el) {
-        el.textContent = message;
-    }
+        setStatus(message) {
+            window.TigrayRaminoMultiplayer?.setStatus(message);
+            TR.setMessage?.(message);
+        },
 
-    if (
-        window.TigrayRamino?.setMessage
-    ) {
-        TR.setMessage(message);
-    }
-},
+        errorMessage(error) {
+            return String(error?.message || 'The action failed.').replace(/^Firebase:\s*/i, '');
+        },
 
-
-        // ============================================================
-        // STOP
-        // ============================================================
+        stopListeners() {
+            this.unsubscribeGame?.();
+            this.unsubscribePrivate?.();
+            this.unsubscribeGame = null;
+            this.unsubscribePrivate = null;
+        },
 
         stop() {
-            for(const [name,original] of Object.entries(this.originalActions||{}))TR[name]=original;
-            this.originalActions={};
-
-            if (
-                this.unsubscribeGame
-            ) {
-
-                this.unsubscribeGame();
-
-                this.unsubscribeGame =
-                    null;
-            }
-
-
-            if (
-                this.unsubscribePrivate
-            ) {
-
-                this.unsubscribePrivate();
-
-                this.unsubscribePrivate =
-                    null;
-            }
-
-
-            this.roomId =
-                null;
-
-            this.playerId =
-                null;
-
-            this.playerIndex =
-                null;
-
-            this.syncing =
-                false;
-
-            this.patched =
-                false;
+            this.stopListeners();
+            Object.entries(this.originalActions).forEach(([name, original]) => {
+                TR[name] = original;
+            });
+            this.originalActions = {};
+            this.patched = false;
+            this.roomId = null;
+            this.playerId = null;
+            this.playerIndex = null;
+            TR.G.multiplayer = false;
         }
     };
 
-
-    // ================================================================
-    // EXPORT
-    // ================================================================
-
-    window.TigrayRaminoMultiplayerGame =
-        GameMP;
-
+    window.TigrayRaminoMultiplayerGame = GameMP;
 })();

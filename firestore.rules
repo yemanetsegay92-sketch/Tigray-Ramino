@@ -1,0 +1,210 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ==============================================================
+    // Assumed data model (schemaVersion 2)
+    // ==============================================================
+    // rooms/{roomId}
+    //   roomId: string(5), hostUid: string(1..128), status: enum,
+    //   maxPlayers: int(2..4), memberUids: list(max 4),
+    //   playerOrder: list(max 4), players: list(max 4),
+    //   createdAt/updatedAt: timestamp; startedAt/finishedAt optional timestamp.
+    // rooms/{roomId}/members/{uid}
+    //   uid: string, displayName: string(1..32), role: host|player,
+    //   joinedAt/lastSeenAt: timestamp.
+    // rooms/{roomId}/game/public
+    //   Public table state only. It contains no deck order or private cards.
+    // rooms/{roomId}/privateHands/{uid}
+    //   uid-owned private cards and the matching public-state revision.
+    // rooms/{roomId}/server/{document=**}
+    //   Canonical deck, all hands, action receipts. Server only.
+    // players_public/{uid}, players_private/{uid}, leaderboards/{id},
+    // tournaments/{id}: reserved for later phases and client-write denied.
+    //
+    // All writes are intentionally denied to clients. Callable Functions use
+    // the Admin SDK, validate commands, and atomically publish allowed views.
+
+    // ==============================================================
+    // Common helpers
+    // ==============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    function uidUnchanged() {
+      return isAuthenticated() &&
+        (!('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid);
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function validString(value, minLength, maxLength) {
+      return value is string &&
+        value.size() >= minLength && value.size() <= maxLength;
+    }
+
+    function validList(value, maxSize) {
+      return value is list && value.size() <= maxSize;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function roomPath(roomId) {
+      return /databases/$(database)/documents/rooms/$(roomId);
+    }
+
+    function roomExists(roomId) {
+      return exists(roomPath(roomId));
+    }
+
+    function isRoomMember(roomId) {
+      return isAuthenticated() && roomExists(roomId) &&
+        request.auth.uid in get(roomPath(roomId)).data.memberUids;
+    }
+
+    function isValidRoom(data) {
+      return hasRequiredFields(data, [
+          'schemaVersion', 'roomId', 'hostUid', 'status', 'maxPlayers',
+          'memberUids', 'playerOrder', 'players', 'createdAt', 'updatedAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'schemaVersion', 'roomId', 'hostUid', 'status', 'maxPlayers',
+          'memberUids', 'playerOrder', 'players', 'createdAt', 'updatedAt',
+          'startedAt', 'finishedAt'
+        ]) &&
+        data.schemaVersion == 2 &&
+        validString(data.roomId, 5, 5) &&
+        validString(data.hostUid, 1, 128) &&
+        data.status in ['waiting', 'playing', 'finished', 'abandoned'] &&
+        data.maxPlayers is int && data.maxPlayers >= 2 && data.maxPlayers <= 4 &&
+        validList(data.memberUids, 4) && validList(data.playerOrder, 4) &&
+        validList(data.players, 4) &&
+        data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+
+    function isValidMember(data) {
+      return hasRequiredFields(data, [
+          'schemaVersion', 'uid', 'displayName', 'role', 'joinedAt', 'lastSeenAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'schemaVersion', 'uid', 'displayName', 'role', 'joinedAt', 'lastSeenAt'
+        ]) &&
+        data.schemaVersion == 2 && validString(data.uid, 1, 128) &&
+        validString(data.displayName, 1, 32) &&
+        data.role in ['host', 'player'] &&
+        data.joinedAt is timestamp && data.lastSeenAt is timestamp;
+    }
+
+    function isValidPublicGame(data) {
+      return hasRequiredFields(data, [
+          'schemaVersion', 'status', 'playerIds', 'currentPlayer', 'phase',
+          'revision', 'deckCount', 'discardPile', 'players', 'updatedAt'
+        ]) &&
+        data.schemaVersion == 2 && data.status in ['playing', 'finished'] &&
+        validList(data.playerIds, 4) && validList(data.players, 4) &&
+        validList(data.discardPile, 108) &&
+        data.currentPlayer is int && data.currentPlayer >= 0 && data.currentPlayer < 4 &&
+        data.phase in ['draw', 'discard'] && data.revision is int && data.revision >= 0 &&
+        data.deckCount is int && data.deckCount >= 0 && data.deckCount <= 108 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPrivateHand(data, uid) {
+      return hasRequiredFields(data, [
+          'schemaVersion', 'playerId', 'hand', 'handCount', 'revision', 'updatedAt'
+        ]) &&
+        hasOnlyAllowedFields(data, [
+          'schemaVersion', 'playerId', 'hand', 'handCount', 'revision', 'updatedAt'
+        ]) &&
+        data.schemaVersion == 2 && data.playerId == uid &&
+        validList(data.hand, 14) && data.handCount is int &&
+        data.handCount >= 0 && data.handCount <= 14 &&
+        data.revision is int && data.revision >= 0 && data.updatedAt is timestamp;
+    }
+
+    // ==============================================================
+    // Multiplayer reads. No client writes are permitted.
+    // ==============================================================
+    match /rooms/{roomId} {
+      allow get, list: if isAuthenticated() &&
+        request.auth.uid in resource.data.memberUids;
+      allow create: if isValidRoom(request.resource.data) && uidUnchanged() && false;
+      allow update: if isValidRoom(request.resource.data) && uidNotModified() &&
+        areImmutableFieldsUnchanged(['roomId', 'createdAt']) && false;
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isRoomMember(roomId);
+        allow create, update: if isValidMember(request.resource.data) && false;
+        allow delete: if false;
+      }
+
+      match /game/public {
+        allow read: if isRoomMember(roomId);
+        allow create, update: if isValidPublicGame(request.resource.data) && false;
+        allow delete: if false;
+      }
+
+      match /privateHands/{uid} {
+        allow read: if isOwner(uid) && isRoomMember(roomId);
+        allow create, update: if isValidPrivateHand(request.resource.data, uid) && false;
+        allow delete: if false;
+      }
+
+      match /server/{document=**} {
+        allow read, write: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Future-ready identity separation. Public profiles must never contain
+    // email, phone, Telegram init data, or other private identity data.
+    match /players_public/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /players_private/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if isDocOwner() && false;
+    }
+
+    match /leaderboards/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /tournaments/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
