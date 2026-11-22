@@ -1,0 +1,32 @@
+{
+  "functions": {
+    "source": ".",
+    "codebase": "ramino2",
+    "runtime": "nodejs22",
+    "ignore": [
+      ".firebase-cli-cache",
+      ".git",
+      ".github",
+      "Tigray_Ramino_11_Final_Turn_Rules.zip",
+      "firebase-debug.log",
+      "node_modules",
+      "tests"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "anonymous": true
+    }
+  },
+  "emulators": {
+    "auth": { "port": 9099 },
+    "functions": { "port": 5001 },
+    "firestore": { "port": 8080 },
+    "ui": { "enabled": true, "port": 4000 },
+    "singleProjectMode": true
+  }
+}

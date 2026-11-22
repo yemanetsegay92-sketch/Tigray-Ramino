@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const vm=require('node:vm');
 const fs=require('node:fs');
 const path=require('node:path');
+const serverEngine=require('../backend/engine.cjs');
 function engine(){
  const context=vm.createContext({window:{},console,localStorage:{getItem:()=>null,setItem:()=>{}},setTimeout,setInterval,clearInterval,document:{getElementById:()=>null}});
  for(const file of ['config','state','cards','validation','joker','monte','game','multiplayer-game'])
@@ -97,19 +98,26 @@ test('duplicate physical card cannot be opened twice',()=>{
 async function online(){
  const e=engine();const {T,context}=e;const MP=context.window.TigrayRaminoMultiplayerGame;
  MP.roomId='test';MP.playerId='p0';MP.playerIndex=0;T.G.multiplayer=true;T.G.networkRevision=0;
- context.window.TigrayRaminoMultiplayer={player:{id:'p0'}};
- const store={state:{status:'playing',playerIds:['p0','p1','p2'],currentPlayer:0,phase:'discard',winner:null,revision:0,players:T.G.players.map(p=>MP.playerPublicData(p)),deck:T.G.deck,discardPile:[]},p0:{hand:[]}};
- const snap=v=>({exists:()=>!!v,data:()=>JSON.parse(JSON.stringify(v))});
+ context.window.TigrayRaminoMultiplayer={setStatus:m=>T.setMessage(m)};
+ const ids=['p0','p1','p2'];
+ const store={state:JSON.parse(JSON.stringify(T.G)),p0:{hand:[]}};store.state.revision=0;
  let fail=false;
- context.window.RaminoFirebase={db:{},doc:(_db,...parts)=>parts.at(-1),serverTimestamp:()=>1,getDoc:async r=>snap(store[r]),runTransaction:async(_db,fn)=>{
-  const writes=[];await fn({get:async r=>snap(store[r]),update:(r,v)=>writes.push([r,{...store[r],...v}]),set:(r,v)=>writes.push([r,v])});
-  if(fail)throw Error('test network failure');for(const [r,v] of writes)store[r]=JSON.parse(JSON.stringify(v));
+ context.window.RaminoFirebase={submitAction:async payload=>{
+  if(fail)throw Error('test network failure');
+  if(payload.expectedRevision!==store.state.revision)throw Error('stale revision');
+  const candidate=JSON.parse(JSON.stringify(T.G));candidate.multiplayer=false;
+  const result=serverEngine.applyAction(candidate,MP.playerIndex,payload.action);
+  const revision=store.state.revision+1;store.state=JSON.parse(JSON.stringify(result.state));store.state.revision=revision;
+  const publicState=serverEngine.publicState(result.state,ids,revision);
+  store.p0=serverEngine.privateHand(result.state,0,'p0',revision);
+  MP.applySynchronizedState(publicState,store.p0);
+  return {revision,message:result.message};
  }};
  MP.patchActions();return {...e,MP,store,setFail:v=>fail=v};
 }
 test('online persists image opening, hand and cross-player additions together',async()=>{
  const {T,MP,store,group,card}=await online();const opening=group('J',4);const addition=card(6,'♥');T.G.players[0].hand=[...opening,addition,card(9)];
- const target=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:target,points:12,displayCards:T.computeComboDisplay(target,'sequence')}];store.state.players[1]=MP.playerPublicData(T.G.players[1]);
+ const target=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:target,points:12,displayCards:T.computeComboDisplay(target,'sequence')}];
  await T.doOpenCombo(opening);assert.equal(store.state.players[0].opened,true);assert.equal(store.p0.hand.length,2);
  await T.doAddToCombo(addition,1,0);assert.equal(store.state.players[1].combos[0].cards.length,4);assert.equal(store.p0.hand.length,1);
 });
@@ -188,12 +196,12 @@ test('invalid remainder after removal cannot stay on table',()=>{
 });
 test('online add-on provenance survives reload and obligation cleanup',async()=>{
  const {T,MP,store,card}=await online();T.G.players[0].opened=true;
- const original=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:original,points:12}];store.state.players[1]=MP.playerPublicData(T.G.players[1]);const addon=card(6,'♥');T.G.players[0].hand=[addon,card(8),card(9)];
+ const original=[card(3,'♥'),card(4,'♥'),card(5,'♥')];T.G.players[1].combos=[{type:'sequence',cards:original,points:12}];const addon=card(6,'♥');T.G.players[0].hand=[addon,card(8),card(9)];
  await T.doAddToCombo(addon,1,0);assert.equal(store.state.players[1].combos[0].contributors[addon.id],0);assert.equal(T.G.players[1].combos[0].contributors[addon.id],0);
  T.G.jokerSwapActive=true;store.state.jokerSwapActive=true;await T.doDiscardCard(T.G.players[0].hand[0]);assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.players[1].combos[0].cards.length,3);assert.ok(!store.state.players[1].combos[0].cards.some(c=>c.id===addon.id));
 });
 test('online Joker-swap obligation survives synchronization and eliminates on failure',async()=>{
- const e=await online();const {T,MP,store,card}=e;jokerTable(e);store.state.players[1]=MP.playerPublicData(T.G.players[1]);const replacement=card(5);T.G.players[0].hand=[replacement,card(8),card(9)];T.G.selected=[0];
+ const e=await online();const {T,store,card}=e;jokerTable(e);const replacement=card(5);T.G.players[0].hand=[replacement,card(8),card(9)];T.G.selected=[0];
  await T.tryJokerSwap(1,0,2);assert.equal(T.G.jokerSwapActive,true);assert.equal(store.state.jokerSwapActive,true);
  await T.doDiscardCard(T.G.players[0].hand.find(c=>c.rank==='9'));assert.ok(store.state.eliminated.includes(0));assert.equal(store.state.players[1].combos.length,0);
 });
@@ -268,7 +276,7 @@ test('elimination puts removed cards below existing discards and preserves final
  assert.deepEqual(Array.from(T.G.discardPile,c=>c.id),[...combo,old,top,last].map(c=>c.id));assert.equal(T.G.discardPile.at(-1).id,last.id);assert.ok(T.G.eliminated.includes(0));
 });
 test('online Monte cannot activate after opening and sequence cap preserves hand',async()=>{
- const {T,MP,store,seq,prepare}=await online();const cards=seq([2,3,4,5,6,7]);prepare([cards]);store.p0.hand=JSON.parse(JSON.stringify(T.G.players[0].hand));await T.doOpenCombo(cards);assert.equal(T.G.players[0].hand.length,7);assert.equal(T.G.players[0].combos.length,0);T.G.players[0].opened=true;store.state.players[0]=MP.playerPublicData(T.G.players[0]);await T.doMonteWin();assert.equal(T.G.monteMode,false);assert.ok(!store.state.monteMode);
+ const {T,store,seq,prepare}=await online();const cards=seq([2,3,4,5,6,7]);prepare([cards]);store.p0.hand=JSON.parse(JSON.stringify(T.G.players[0].hand));await T.doOpenCombo(cards);assert.equal(T.G.players[0].hand.length,7);assert.equal(T.G.players[0].combos.length,0);T.G.players[0].opened=true;await T.doMonteWin();assert.equal(T.G.monteMode,false);assert.ok(!store.state.monteMode);
 });
 test('online elimination preserves discard order beneath the final discard',async()=>{
  const {T,store,card,group,prepare}=await online();const old=card(8),top=card(9);T.G.discardPile=[old,top];store.state.discardPile=JSON.parse(JSON.stringify(T.G.discardPile));const combo=group(2);const last=prepare([combo]);await T.doOpenCombo(combo);await T.doDiscardCard(last);assert.deepEqual(store.state.discardPile.map(c=>c.id),[...combo,old,top,last].map(c=>c.id));assert.ok(store.state.eliminated.includes(0));
